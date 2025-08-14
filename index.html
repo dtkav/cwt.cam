@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CWT.cam 📷 - CBOR Web Token Debugger</title>
+    <title>CWT.cam - CBOR Web Token Debugger</title>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
         * {
             margin: 0;
@@ -13,10 +14,21 @@
 
         body {
             font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
-            background: #0a0a0a;
+            background: #0a0a0a url('static/tile-dark.png') repeat;
+            background-size: 25%;
             color: #e0e0e0;
             font-size: 13px;
             line-height: 1.4;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            min-height: 100vh;
+            background: #0a0a0a;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
         }
 
         .header {
@@ -29,9 +41,17 @@
         }
 
         .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
             font-size: 1.2rem;
             font-weight: bold;
             color: #4a9eff;
+        }
+
+        .logo img {
+            height: 140px;
+            width: auto;
         }
 
         .standards {
@@ -47,7 +67,7 @@
         .main {
             display: grid;
             grid-template-columns: 1fr 350px;
-            height: calc(100vh - 60px);
+            min-height: calc(100vh - 60px);
         }
 
         .decoder-panel {
@@ -71,13 +91,26 @@
             background: #1a1a1a;
             padding: 0.5rem 1rem;
             font-weight: bold;
-            font-size: 0.8rem;
+            font-size: 1rem;
             color: #ccc;
             display: flex;
             justify-content: space-between;
             align-items: center;
             cursor: pointer;
             user-select: none;
+        }
+
+        .section-header span {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .section-header i[data-lucide] {
+            width: 1rem;
+            height: 1rem;
+            stroke-width: 2;
+            flex-shrink: 0;
         }
 
         .section-header:hover {
@@ -285,8 +318,11 @@
             border: 1px solid rgba(255, 107, 107, 0.3);
             padding: 0.5rem;
             border-radius: 3px;
-            font-size: 0.75rem;
+            font-size: 1rem;
             margin: 0.5rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
         }
 
         .success {
@@ -295,8 +331,11 @@
             border: 1px solid rgba(81, 207, 102, 0.3);
             padding: 0.5rem;
             border-radius: 3px;
-            font-size: 0.75rem;
+            font-size: 1rem;
             margin: 0.5rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
         }
 
         .warning {
@@ -305,8 +344,27 @@
             border: 1px solid rgba(255, 212, 59, 0.3);
             padding: 0.5rem;
             border-radius: 3px;
-            font-size: 0.75rem;
+            font-size: 1rem;
             margin: 0.5rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        /* All lucide icons */
+        .lucide,
+        i[data-lucide] {
+            height: 1rem;
+        }
+
+        /* Status message icons */
+        .success i[data-lucide],
+        .error i[data-lucide],
+        .warning i[data-lucide] {
+            width: 1rem;
+            height: 1rem;
+            stroke-width: 2.5;
+            flex-shrink: 0;
         }
 
         .checkbox-container {
@@ -446,6 +504,13 @@
             background: #555;
         }
 
+        @media (max-width: 1240px) {
+            .container {
+                margin: 0 20px;
+                max-width: none;
+            }
+        }
+
         @media (max-width: 1024px) {
             .main {
                 grid-template-columns: 1fr;
@@ -455,26 +520,40 @@
             .schema-panel {
                 max-height: 40vh;
             }
+            
+            .container {
+                margin: 0 10px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 0;
+                box-shadow: none;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="logo">CWT.cam 📷</div>
-        <div class="standards">
-            <a href="https://tools.ietf.org/rfc/rfc8392.txt" target="_blank">RFC 8392</a> |
-            <a href="https://www.iana.org/assignments/cwt" target="_blank">IANA CWT Claims</a> |
-            <a href="https://tools.ietf.org/rfc/rfc8152.txt" target="_blank">RFC 8152 (COSE)</a>
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <img src="static/logo.png" alt="CWT.cam Logo" />
+            </div>
+            <div class="standards">
+                <a href="https://tools.ietf.org/rfc/rfc8392.txt" target="_blank">RFC 8392</a> |
+                <a href="https://www.iana.org/assignments/cwt" target="_blank">IANA CWT Claims</a> |
+                <a href="https://tools.ietf.org/rfc/rfc8152.txt" target="_blank">RFC 8152 (COSE)</a>
+            </div>
         </div>
-    </div>
 
-    <div class="main">
+        <div class="main">
         <!-- Decoder Panel -->
         <div class="decoder-panel">
             <!-- Token Input -->
             <div class="section">
                 <div class="section-header">
-                    <span>🔤 CWT Token Input</span>
+                    <span><i data-lucide="file-text"></i> CWT Token Input</span>
                     <div class="controls">
                         <button class="btn" onclick="clearToken()">Clear</button>
                         <button class="btn btn-primary" onclick="loadSample()">Sample</button>
@@ -492,7 +571,7 @@
             <!-- COSE Structure Info -->
             <div class="section">
                 <div class="section-header">
-                    <span>🔒 COSE Structure</span>
+                    <span><i data-lucide="lock"></i> COSE Structure</span>
                 </div>
                 <div class="section-content">
                     <div id="coseInfo" class="cose-info">
@@ -512,10 +591,29 @@
                 </div>
             </div>
 
+            <!-- Signature Info -->
+            <div class="section">
+                <div class="section-header">
+                    <span><i data-lucide="check-circle"></i> Signature Verification</span>
+                </div>
+                <div class="section-content">
+                    <div class="form-group" style="margin-bottom: 0.5rem;">
+                        <label class="form-label">Verification Key (PEM, JWK, Hex, Base64)</label>
+                        <textarea id="verificationKeyInput" class="form-input" placeholder="Paste public key or HMAC secret here..." style="min-height: 80px; resize: vertical; font-size: 11px;"></textarea>
+                    </div>
+                    <div id="signatureStatus">
+                        <div class="help-text">
+                            Enter a verification key above to automatically verify the CWT signature.
+                            Supports: PEM, JWK, Hex, Base64 formats for ECDSA/HMAC keys.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- CWT Claims -->
             <div class="section" style="flex: 1;">
                 <div class="section-header">
-                    <span>📋 CWT Claims Set</span>
+                    <span><i data-lucide="clipboard-list"></i> CWT Claims Set</span>
                     <span id="claimCount" style="font-size: 0.7rem; color: #888;">0 claims</span>
                 </div>
                 <div class="section-content" style="flex: 1; display: flex; flex-direction: column;">
@@ -535,25 +633,6 @@ Load a token to see parsed claims • Click claim names to edit mappings
                     </div>
                 </div>
             </div>
-
-            <!-- Signature Info -->
-            <div class="section">
-                <div class="section-header">
-                    <span>✅ Signature Verification</span>
-                </div>
-                <div class="section-content">
-                    <div class="form-group" style="margin-bottom: 0.5rem;">
-                        <label class="form-label">Verification Key (PEM, JWK, Hex, Base64)</label>
-                        <textarea id="verificationKeyInput" class="form-input" placeholder="Paste public key or HMAC secret here..." style="min-height: 80px; resize: vertical; font-size: 11px;"></textarea>
-                    </div>
-                    <div id="signatureStatus">
-                        <div class="help-text">
-                            Enter a verification key above to automatically verify the CWT signature.
-                            Supports: PEM, JWK, Hex, Base64 formats for ECDSA/HMAC keys.
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <!-- Schema Panel -->
@@ -561,7 +640,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
             <!-- Schema Controls -->
             <div class="section">
                 <div class="section-header">
-                    <span>⚙️ Schema Controls</span>
+                    <span><i data-lucide="settings"></i> Schema Controls</span>
                 </div>
                 <div class="section-content">
                     <div class="checkbox-container">
@@ -583,7 +662,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
             <!-- Current Claims -->
             <div class="section" style="flex: 1;">
                 <div class="section-header" onclick="toggleSchemaTable()">
-                    <span>📖 Claims Registry</span>
+                    <span><i data-lucide="book-open"></i> Claims Registry</span>
                     <span id="registryCount" style="font-size: 0.7rem; color: #888;">0 claims</span>
                 </div>
                 <div class="section-content" style="flex: 1; display: flex; flex-direction: column;">
@@ -596,7 +675,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
             <!-- Schema Table -->
             <div class="section" id="schemaTableSection" style="display: none;">
                 <div class="section-header">
-                    <span>📝 Schema Editor</span>
+                    <span><i data-lucide="edit"></i> Schema Editor</span>
                     <button class="btn" onclick="toggleSchemaTable()">Collapse</button>
                 </div>
                 <div class="section-content">
@@ -621,6 +700,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 </div>
             </div>
         </div>
+    </div>
     </div>
 
     <!-- Modal for editing claims -->
@@ -1332,6 +1412,7 @@ Click claim names to edit mappings • <a href="https://tools.ietf.org/rfc/rfc83
 
         function clearToken() {
             document.getElementById('tokenInput').value = '';
+            document.getElementById('verificationKeyInput').value = '';
             updateDisplay();
         }
 
@@ -1521,7 +1602,7 @@ HwVjBrXcRZNTnHtxeQhd6QH8kF9v6YsyYBfhV8u9Q4C6w8oX2sV3rj5NgQ==
             
             if (currentCOSEResult.type === 'Unprotected Claims') {
                 statusElement.innerHTML = `
-                    <div class="error">❌ No signature protection</div>
+                    <div class="error"><i data-lucide="shield-off"></i> No signature protection</div>
                     <div class="help-text">This CWT has no COSE signature protection</div>
                 `;
                 return;
@@ -1554,31 +1635,34 @@ HwVjBrXcRZNTnHtxeQhd6QH8kF9v6YsyYBfhV8u9Q4C6w8oX2sV3rj5NgQ==
                 
                 if (isValid) {
                     statusElement.innerHTML = `
-                        <div class="success">✅ Signature verification PASSED</div>
+                        <div class="success"><i data-lucide="check"></i> Signature verification PASSED</div>
                         <div class="help-text">
                             COSE: ${currentCOSEResult.type}<br>
                             Algorithm: ${COSE_ALGORITHMS[currentCOSEResult.algorithm] || 'Unknown'}<br>
                             The CWT signature is valid and can be trusted
                         </div>
                     `;
+                    lucide.createIcons();
                 } else {
                     statusElement.innerHTML = `
-                        <div class="error">❌ Signature verification FAILED</div>
+                        <div class="error"><i data-lucide="x"></i> Signature verification FAILED</div>
                         <div class="help-text">
                             COSE: ${currentCOSEResult.type}<br>
                             Algorithm: ${COSE_ALGORITHMS[currentCOSEResult.algorithm] || 'Unknown'}<br>
                             The signature is invalid - do not trust claims
                         </div>
                     `;
+                    lucide.createIcons();
                 }
             } catch (error) {
                 statusElement.innerHTML = `
-                    <div class="error">❌ Invalid key format</div>
+                    <div class="error"><i data-lucide="alert-triangle"></i> Invalid key format</div>
                     <div class="help-text">
                         ${error.message}<br>
                         Supported formats: PEM, JWK, Hex, Base64
                     </div>
                 `;
+                lucide.createIcons();
             }
         }
         
@@ -1636,6 +1720,9 @@ HwVjBrXcRZNTnHtxeQhd6QH8kF9v6YsyYBfhV8u9Q4C6w8oX2sV3rj5NgQ==
         // Initialize
         updateClaimsList();
         updateDisplay();
+        
+        // Initialize Lucide icons
+        lucide.createIcons();
     </script>
 </body>
 </html>
