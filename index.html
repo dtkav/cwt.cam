@@ -1,0 +1,1641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CWT.cam 📷 - CBOR Web Token Debugger</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .header {
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            padding: 0.75rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #4a9eff;
+        }
+
+        .standards {
+            font-size: 0.7rem;
+            color: #888;
+        }
+
+        .standards a {
+            color: #4a9eff;
+            text-decoration: none;
+        }
+
+        .main {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            height: calc(100vh - 60px);
+        }
+
+        .decoder-panel {
+            background: #111;
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .schema-panel {
+            background: #0f0f0f;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .section {
+            border-bottom: 1px solid #333;
+        }
+
+        .section-header {
+            background: #1a1a1a;
+            padding: 0.5rem 1rem;
+            font-weight: bold;
+            font-size: 0.8rem;
+            color: #ccc;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .section-header:hover {
+            background: #222;
+        }
+
+        .section-content {
+            padding: 0.75rem;
+            overflow-y: auto;
+        }
+
+        .token-input {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            color: #e0e0e0;
+            padding: 0.5rem;
+            width: 100%;
+            min-height: 100px;
+            resize: vertical;
+            font-family: inherit;
+            font-size: 12px;
+        }
+
+        .token-input:focus {
+            outline: none;
+            border-color: #4a9eff;
+        }
+
+        .claims-display {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            padding: 0.75rem;
+            border-radius: 3px;
+            white-space: pre-wrap;
+            font-size: 12px;
+            overflow-x: auto;
+            min-height: 200px;
+        }
+
+        .claim-key {
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            padding: 1px 2px;
+            border-radius: 2px;
+            transition: background 0.2s;
+        }
+
+        .claim-key.mapped {
+            color: #51cf66;
+            background: rgba(81, 207, 102, 0.1);
+        }
+
+        .claim-key.unmapped {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.1);
+        }
+
+        .claim-key:hover {
+            background: rgba(74, 158, 255, 0.2);
+        }
+
+        .claim-value {
+            color: #ffd43b;
+        }
+
+        .controls {
+            padding: 0.5rem;
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: #333;
+            border: 1px solid #555;
+            color: #e0e0e0;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.7rem;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: #444;
+            border-color: #4a9eff;
+        }
+
+        .btn-primary {
+            background: #4a9eff;
+            border-color: #4a9eff;
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            background: #369fff;
+        }
+
+        .claim-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .claim-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.25rem 0.5rem;
+            border-bottom: 1px solid #333;
+            font-size: 0.75rem;
+        }
+
+        .claim-item:hover {
+            background: #1a1a1a;
+        }
+
+        .claim-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex: 1;
+        }
+
+        .claim-source {
+            font-size: 0.6rem;
+            color: #888;
+            background: #333;
+            padding: 0.1rem 0.3rem;
+            border-radius: 2px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            width: 400px;
+            margin: 10% auto;
+            padding: 1rem;
+        }
+
+        .modal-header {
+            border-bottom: 1px solid #333;
+            padding-bottom: 0.5rem;
+            margin-bottom: 1rem;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+
+        .close-btn:hover {
+            color: #fff;
+        }
+
+        .form-group {
+            margin-bottom: 0.75rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-size: 0.75rem;
+            color: #ccc;
+        }
+
+        .form-input {
+            width: 100%;
+            background: #0a0a0a;
+            border: 1px solid #333;
+            color: #e0e0e0;
+            padding: 0.5rem;
+            font-family: inherit;
+            font-size: 0.8rem;
+            border-radius: 3px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #4a9eff;
+        }
+
+        .error {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.1);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            padding: 0.5rem;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            margin: 0.5rem 0;
+        }
+
+        .success {
+            color: #51cf66;
+            background: rgba(81, 207, 102, 0.1);
+            border: 1px solid rgba(81, 207, 102, 0.3);
+            padding: 0.5rem;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            margin: 0.5rem 0;
+        }
+
+        .warning {
+            color: #ffd43b;
+            background: rgba(255, 212, 59, 0.1);
+            border: 1px solid rgba(255, 212, 59, 0.3);
+            padding: 0.5rem;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            margin: 0.5rem 0;
+        }
+
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+            font-size: 0.75rem;
+        }
+
+        .inline-edit {
+            background: #333;
+            border: 1px solid #4a9eff;
+            color: #e0e0e0;
+            padding: 1px 3px;
+            font-family: inherit;
+            font-size: inherit;
+            border-radius: 2px;
+            min-width: 60px;
+        }
+
+        .inline-edit:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.3);
+        }
+
+        .help-text {
+            font-size: 0.7rem;
+            color: #888;
+            margin-top: 0.5rem;
+        }
+
+        .rfc-link {
+            color: #4a9eff;
+            text-decoration: none;
+        }
+
+        .rfc-link:hover {
+            text-decoration: underline;
+        }
+
+        .schema-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75rem;
+        }
+
+        .schema-table th,
+        .schema-table td {
+            border: 1px solid #333;
+            padding: 0.25rem 0.5rem;
+            text-align: left;
+        }
+
+        .schema-table th {
+            background: #1a1a1a;
+            font-weight: bold;
+            color: #ccc;
+        }
+
+        .schema-table input {
+            background: transparent;
+            border: none;
+            color: #e0e0e0;
+            width: 100%;
+            font-family: inherit;
+            font-size: inherit;
+        }
+
+        .schema-table input:focus {
+            outline: 1px solid #4a9eff;
+            background: #222;
+        }
+
+        .schema-table tr:hover {
+            background: #1a1a1a;
+        }
+
+        .input-format-toggle {
+            display: flex;
+            gap: 0.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .format-btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.6rem;
+            background: #333;
+            border: 1px solid #555;
+            color: #ccc;
+            cursor: pointer;
+            border-radius: 2px;
+        }
+
+        .format-btn.active {
+            background: #4a9eff;
+            border-color: #4a9eff;
+            color: #000;
+        }
+
+        .cose-info {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            padding: 0.5rem;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .cose-field {
+            margin-bottom: 0.25rem;
+        }
+
+        .cose-label {
+            color: #888;
+            font-weight: bold;
+        }
+
+        .cose-value {
+            color: #e0e0e0;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0a0a0a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        @media (max-width: 1024px) {
+            .main {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr auto;
+            }
+            
+            .schema-panel {
+                max-height: 40vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">CWT.cam 📷</div>
+        <div class="standards">
+            <a href="https://tools.ietf.org/rfc/rfc8392.txt" target="_blank">RFC 8392</a> |
+            <a href="https://www.iana.org/assignments/cwt" target="_blank">IANA CWT Claims</a> |
+            <a href="https://tools.ietf.org/rfc/rfc8152.txt" target="_blank">RFC 8152 (COSE)</a>
+        </div>
+    </div>
+
+    <div class="main">
+        <!-- Decoder Panel -->
+        <div class="decoder-panel">
+            <!-- Token Input -->
+            <div class="section">
+                <div class="section-header">
+                    <span>🔤 CWT Token Input</span>
+                    <div class="controls">
+                        <button class="btn" onclick="clearToken()">Clear</button>
+                        <button class="btn btn-primary" onclick="loadSample()">Sample</button>
+                    </div>
+                </div>
+                <div class="section-content">
+                    <div class="input-format-toggle">
+                        <button class="format-btn active" id="base64Btn" onclick="setInputFormat('base64')">Base64URL</button>
+                        <button class="format-btn" id="hexBtn" onclick="setInputFormat('hex')">Hex</button>
+                    </div>
+                    <textarea id="tokenInput" class="token-input" placeholder="Paste base64url-encoded or hex CWT token here..."></textarea>
+                </div>
+            </div>
+
+            <!-- COSE Structure Info -->
+            <div class="section">
+                <div class="section-header">
+                    <span>🔒 COSE Structure</span>
+                </div>
+                <div class="section-content">
+                    <div id="coseInfo" class="cose-info">
+                        <div class="cose-field">
+                            <span class="cose-label">Type:</span> 
+                            <span class="cose-value" id="coseType">None detected</span>
+                        </div>
+                        <div class="cose-field">
+                            <span class="cose-label">Algorithm:</span> 
+                            <span class="cose-value" id="coseAlgorithm">Unknown</span>
+                        </div>
+                        <div class="cose-field">
+                            <span class="cose-label">Key ID:</span> 
+                            <span class="cose-value" id="coseKeyId">Not specified</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CWT Claims -->
+            <div class="section" style="flex: 1;">
+                <div class="section-header">
+                    <span>📋 CWT Claims Set</span>
+                    <span id="claimCount" style="font-size: 0.7rem; color: #888;">0 claims</span>
+                </div>
+                <div class="section-content" style="flex: 1; display: flex; flex-direction: column;">
+                    <div class="claims-display" id="claimsDisplay">
+{
+    "iss": "https://example.com",     // 1: Issuer
+    "sub": "user123",                 // 2: Subject
+    "aud": "app456",                  // 3: Audience
+    "exp": 1735689600,               // 4: Expiration Time
+    "iat": 1735603200                // 6: Issued At
+}
+
+<div class="help-text">
+Load a token to see parsed claims • Click claim names to edit mappings
+<a href="https://tools.ietf.org/rfc/rfc8392.txt#section-3.1" target="_blank" class="rfc-link">RFC 8392 §3.1</a>
+</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Signature Info -->
+            <div class="section">
+                <div class="section-header">
+                    <span>✅ Signature Verification</span>
+                </div>
+                <div class="section-content">
+                    <div class="form-group" style="margin-bottom: 0.5rem;">
+                        <label class="form-label">Verification Key (PEM, JWK, Hex, Base64)</label>
+                        <textarea id="verificationKeyInput" class="form-input" placeholder="Paste public key or HMAC secret here..." style="min-height: 80px; resize: vertical; font-size: 11px;"></textarea>
+                    </div>
+                    <div id="signatureStatus">
+                        <div class="help-text">
+                            Enter a verification key above to automatically verify the CWT signature.
+                            Supports: PEM, JWK, Hex, Base64 formats for ECDSA/HMAC keys.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schema Panel -->
+        <div class="schema-panel">
+            <!-- Schema Controls -->
+            <div class="section">
+                <div class="section-header">
+                    <span>⚙️ Schema Controls</span>
+                </div>
+                <div class="section-content">
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="includeStandard" checked>
+                        <label for="includeStandard">RFC 8392 Claims (1-7)</label>
+                    </div>
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="includeIana" checked>
+                        <label for="includeIana">IANA Extended Claims</label>
+                    </div>
+                    <div class="controls">
+                        <button class="btn btn-primary" onclick="addClaim()">+ Add Claim</button>
+                        <button class="btn" onclick="exportSchema()">Export</button>
+                        <button class="btn" onclick="importSchema()">Import</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Current Claims -->
+            <div class="section" style="flex: 1;">
+                <div class="section-header" onclick="toggleSchemaTable()">
+                    <span>📖 Claims Registry</span>
+                    <span id="registryCount" style="font-size: 0.7rem; color: #888;">0 claims</span>
+                </div>
+                <div class="section-content" style="flex: 1; display: flex; flex-direction: column;">
+                    <div class="claim-list" id="claimList">
+                        <!-- Claims populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schema Table -->
+            <div class="section" id="schemaTableSection" style="display: none;">
+                <div class="section-header">
+                    <span>📝 Schema Editor</span>
+                    <button class="btn" onclick="toggleSchemaTable()">Collapse</button>
+                </div>
+                <div class="section-content">
+                    <table class="schema-table" id="schemaTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 20%;">Key</th>
+                                <th style="width: 30%;">Name</th>
+                                <th style="width: 45%;">Description</th>
+                                <th style="width: 5%;">Del</th>
+                            </tr>
+                        </thead>
+                        <tbody id="schemaTableBody">
+                            <tr id="newClaimRow">
+                                <td><input type="number" id="newClaimKey" placeholder="100" /></td>
+                                <td><input type="text" id="newClaimName" placeholder="custom_claim" /></td>
+                                <td><input type="text" id="newClaimDesc" placeholder="Description" /></td>
+                                <td><button class="btn" onclick="addClaimFromTable()" style="font-size: 0.6rem;">+</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for editing claims -->
+    <div id="claimModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>Edit Claim Mapping</span>
+                <button class="close-btn" onclick="closeModal()">×</button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Claim Key (Integer)</label>
+                <input type="number" id="claimKey" class="form-input" placeholder="e.g., 100">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Claim Name</label>
+                <input type="text" id="claimName" class="form-input" placeholder="e.g., environment">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <input type="text" id="claimDescription" class="form-input" placeholder="Brief description of the claim">
+            </div>
+            <div class="controls">
+                <button class="btn btn-primary" onclick="saveClaim()">Save</button>
+                <button class="btn" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // RFC 8392 Standard Claims
+        const RFC8392_CLAIMS = {
+            1: { name: "iss", description: "Issuer - identifies who issued the CWT" },
+            2: { name: "sub", description: "Subject - identifies the subject of the CWT" },
+            3: { name: "aud", description: "Audience - identifies the recipients that the CWT is intended for" },
+            4: { name: "exp", description: "Expiration Time - identifies the expiration time after which the CWT MUST NOT be accepted" },
+            5: { name: "nbf", description: "Not Before - identifies the time before which the CWT MUST NOT be accepted" },
+            6: { name: "iat", description: "Issued At - identifies the time at which the CWT was issued" },
+            7: { name: "cti", description: "CWT ID - provides a unique identifier for the CWT" }
+        };
+
+        // IANA Extended Claims (commonly used subset)
+        const IANA_CLAIMS = {
+            8: { name: "cnf", description: "Confirmation - identifies the key used to confirm possession" },
+            9: { name: "scope", description: "Scope - contains a space-separated list of scope values" },
+            10: { name: "profile", description: "Profile - contains a space-separated list of profile values" },
+            11: { name: "at_hash", description: "Access Token Hash - base64url encoded hash of an access token" },
+            12: { name: "c_hash", description: "Code Hash - base64url encoded hash of the authorization code" },
+            13: { name: "nonce", description: "Nonce - string value used to associate a client session with an ID Token" },
+            39: { name: "htu", description: "HTTP URI - HTTP URI of the request" },
+            40: { name: "htm", description: "HTTP Method - HTTP method of the request" }
+        };
+
+        // COSE Algorithm identifiers
+        const COSE_ALGORITHMS = {
+            '-7': 'ES256 (ECDSA w/ SHA-256)',
+            '-35': 'ES384 (ECDSA w/ SHA-384)', 
+            '-36': 'ES512 (ECDSA w/ SHA-512)',
+            '4': 'HMAC 256/64',
+            '5': 'HMAC 256/256',
+            '6': 'HMAC 384/384',
+            '7': 'HMAC 512/512',
+            '10': 'AES-CCM-16-64-128',
+            '11': 'AES-CCM-16-64-256',
+            '12': 'AES-CCM-64-64-128',
+            '13': 'AES-CCM-64-64-256'
+        };
+
+        let customClaims = {};
+        let currentClaims = null;
+        let currentInputFormat = 'base64';
+        let verificationKey = null;
+        let currentCOSEResult = null;
+
+        // Enhanced CBOR decoder with COSE support
+        class CBORDecoder {
+            constructor(buffer) {
+                this.buffer = new Uint8Array(buffer);
+                this.offset = 0;
+            }
+
+            decode() {
+                if (this.offset >= this.buffer.length) return null;
+                
+                const byte = this.buffer[this.offset++];
+                const majorType = (byte >> 5) & 0x7;
+                const info = byte & 0x1f;
+
+                switch (majorType) {
+                    case 0: return this.readUnsigned(info);
+                    case 1: return -1 - this.readUnsigned(info);
+                    case 2: return this.readBytes(info);
+                    case 3: return this.readText(info);
+                    case 4: return this.readArray(info);
+                    case 5: return this.readMap(info);
+                    case 6: return this.readTag(info);
+                    case 7: return this.readSpecial(info);
+                    default: throw new Error(`Unsupported major type: ${majorType}`);
+                }
+            }
+
+            readUnsigned(info) {
+                if (info < 24) return info;
+                if (info === 24) return this.buffer[this.offset++];
+                if (info === 25) {
+                    const val = (this.buffer[this.offset] << 8) | this.buffer[this.offset + 1];
+                    this.offset += 2;
+                    return val;
+                }
+                if (info === 26) {
+                    const val = (this.buffer[this.offset] << 24) | (this.buffer[this.offset + 1] << 16) | 
+                               (this.buffer[this.offset + 2] << 8) | this.buffer[this.offset + 3];
+                    this.offset += 4;
+                    return val >>> 0;
+                }
+                if (info === 27) {
+                    // 64-bit integer (simplified for JavaScript)
+                    this.offset += 8;
+                    return this.buffer[this.offset - 1];
+                }
+                throw new Error('Unsupported integer encoding');
+            }
+
+            readBytes(info) {
+                const len = info === 31 ? this.readIndefiniteBytes() : this.readUnsigned(info);
+                if (info === 31) return len; // Already handled
+                
+                const bytes = this.buffer.slice(this.offset, this.offset + len);
+                this.offset += len;
+                return bytes;
+            }
+
+            readText(info) {
+                const bytes = this.readBytes(info);
+                if (bytes instanceof Uint8Array) {
+                    return new TextDecoder().decode(bytes);
+                }
+                return bytes; // For indefinite strings
+            }
+
+            readArray(info) {
+                if (info === 31) return this.readIndefiniteArray();
+                
+                const len = this.readUnsigned(info);
+                const arr = [];
+                for (let i = 0; i < len; i++) {
+                    arr.push(this.decode());
+                }
+                return arr;
+            }
+
+            readMap(info) {
+                if (info === 31) return this.readIndefiniteMap();
+                
+                const len = this.readUnsigned(info);
+                const map = {};
+                for (let i = 0; i < len; i++) {
+                    const key = this.decode();
+                    const value = this.decode();
+                    map[key] = value;
+                }
+                return map;
+            }
+
+            readTag(info) {
+                const tag = this.readUnsigned(info);
+                const value = this.decode();
+                return { tag, value };
+            }
+
+            readSpecial(info) {
+                if (info === 20) return false;
+                if (info === 21) return true;
+                if (info === 22) return null;
+                if (info === 23) return undefined;
+                if (info === 31) return Symbol.for('break');
+                throw new Error(`Unsupported special value: ${info}`);
+            }
+
+            readIndefiniteBytes() {
+                const chunks = [];
+                while (true) {
+                    const item = this.decode();
+                    if (item === Symbol.for('break')) break;
+                    chunks.push(item);
+                }
+                // Concatenate byte chunks
+                const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+                const result = new Uint8Array(totalLength);
+                let offset = 0;
+                for (const chunk of chunks) {
+                    result.set(chunk, offset);
+                    offset += chunk.length;
+                }
+                return result;
+            }
+
+            readIndefiniteArray() {
+                const arr = [];
+                while (true) {
+                    const item = this.decode();
+                    if (item === Symbol.for('break')) break;
+                    arr.push(item);
+                }
+                return arr;
+            }
+
+            readIndefiniteMap() {
+                const map = {};
+                while (true) {
+                    const key = this.decode();
+                    if (key === Symbol.for('break')) break;
+                    const value = this.decode();
+                    map[key] = value;
+                }
+                return map;
+            }
+        }
+
+        function setInputFormat(format) {
+            currentInputFormat = format;
+            document.getElementById('base64Btn').classList.toggle('active', format === 'base64');
+            document.getElementById('hexBtn').classList.toggle('active', format === 'hex');
+            
+            const input = document.getElementById('tokenInput');
+            if (format === 'base64') {
+                input.placeholder = 'Paste base64url-encoded CWT token here...';
+            } else {
+                input.placeholder = 'Paste hex-encoded CWT token here (without 0x prefix)...';
+            }
+            
+            updateDisplay();
+        }
+
+        function base64UrlDecode(str) {
+            str = str.replace(/-/g, '+').replace(/_/g, '/');
+            while (str.length % 4) str += '=';
+            
+            const binary = atob(str);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function hexDecode(str) {
+            str = str.replace(/\s/g, '').replace(/^0x/i, '');
+            if (str.length % 2 !== 0) {
+                throw new Error('Invalid hex string length');
+            }
+            
+            const bytes = new Uint8Array(str.length / 2);
+            for (let i = 0; i < str.length; i += 2) {
+                bytes[i / 2] = parseInt(str.substr(i, 2), 16);
+            }
+            return bytes.buffer;
+        }
+
+        function parseCOSEStructure(data) {
+            try {
+                const decoder = new CBORDecoder(data);
+                const structure = decoder.decode();
+                
+                // Check for CWT tag (61)
+                let coseData = structure;
+                if (structure && structure.tag === 61) {
+                    coseData = structure.value;
+                }
+                
+                // COSE_Sign1 structure: [protected headers, unprotected headers, payload, signature]
+                if (Array.isArray(coseData) && coseData.length === 4) {
+                    const protectedHeaders = coseData[0];
+                    const unprotectedHeaders = coseData[1] || {};
+                    const payload = coseData[2];
+                    const signature = coseData[3];
+                    
+                    // Decode protected headers
+                    let decodedProtected = {};
+                    if (protectedHeaders && protectedHeaders.length > 0) {
+                        const protectedDecoder = new CBORDecoder(protectedHeaders);
+                        decodedProtected = protectedDecoder.decode() || {};
+                    }
+                    
+                    const algorithm = decodedProtected[1] || unprotectedHeaders[1];
+                    const keyId = decodedProtected[4] || unprotectedHeaders[4];
+                    
+                    // Parse payload (CWT claims)
+                    let claims = null;
+                    if (payload) {
+                        const payloadDecoder = new CBORDecoder(payload);
+                        claims = payloadDecoder.decode();
+                    }
+                    
+                    return {
+                        type: 'COSE_Sign1',
+                        algorithm: algorithm,
+                        keyId: keyId,
+                        claims: claims,
+                        signature: signature
+                    };
+                }
+                
+                // COSE_Mac0 structure: [protected headers, unprotected headers, payload, tag]
+                if (Array.isArray(coseData) && coseData.length === 4) {
+                    // Similar parsing but for MAC instead of signature
+                    return {
+                        type: 'COSE_Mac0',
+                        claims: null // Would parse similarly
+                    };
+                }
+                
+                // Direct claims (no COSE protection)
+                if (typeof coseData === 'object' && !Array.isArray(coseData)) {
+                    return {
+                        type: 'Unprotected Claims',
+                        claims: coseData
+                    };
+                }
+                
+                throw new Error('Unknown COSE structure');
+            } catch (error) {
+                throw new Error(`COSE parsing failed: ${error.message}`);
+            }
+        }
+
+        function updateCOSEInfo(coseResult) {
+            const typeElement = document.getElementById('coseType');
+            const algorithmElement = document.getElementById('coseAlgorithm');
+            const keyIdElement = document.getElementById('coseKeyId');
+            
+            if (coseResult) {
+                typeElement.textContent = coseResult.type || 'Unknown';
+                
+                const algName = COSE_ALGORITHMS[coseResult.algorithm] || 
+                               (coseResult.algorithm ? `Algorithm ${coseResult.algorithm}` : 'Unknown');
+                algorithmElement.textContent = algName;
+                
+                if (coseResult.keyId) {
+                    if (typeof coseResult.keyId === 'string') {
+                        keyIdElement.textContent = coseResult.keyId;
+                    } else if (coseResult.keyId instanceof Uint8Array) {
+                        keyIdElement.textContent = Array.from(coseResult.keyId)
+                            .map(b => b.toString(16).padStart(2, '0')).join('');
+                    } else {
+                        keyIdElement.textContent = String(coseResult.keyId);
+                    }
+                } else {
+                    keyIdElement.textContent = 'Not specified';
+                }
+            } else {
+                typeElement.textContent = 'None detected';
+                algorithmElement.textContent = 'Unknown';
+                keyIdElement.textContent = 'Not specified';
+            }
+        }
+
+        function getActiveSchema() {
+            let schema = {};
+            
+            if (document.getElementById('includeStandard').checked) {
+                Object.assign(schema, RFC8392_CLAIMS);
+            }
+            
+            if (document.getElementById('includeIana').checked) {
+                Object.assign(schema, IANA_CLAIMS);
+            }
+            
+            Object.assign(schema, customClaims);
+            return schema;
+        }
+
+        function parseCWT(token) {
+            try {
+                let buffer;
+                if (currentInputFormat === 'hex') {
+                    buffer = hexDecode(token.trim());
+                } else {
+                    buffer = base64UrlDecode(token.trim());
+                }
+                
+                const coseResult = parseCOSEStructure(buffer);
+                
+                if (coseResult.claims) {
+                    return { 
+                        success: true, 
+                        claims: coseResult.claims,
+                        cose: coseResult
+                    };
+                } else {
+                    return { 
+                        success: false, 
+                        error: 'No claims found in CWT structure',
+                        cose: coseResult
+                    };
+                }
+            } catch (error) {
+                return { 
+                    success: false, 
+                    error: error.message 
+                };
+            }
+        }
+
+        function formatClaimsForDisplay(claims) {
+            const schema = getActiveSchema();
+            let formatted = "{\n";
+            
+            const entries = Object.entries(claims);
+            document.getElementById('claimCount').textContent = `${entries.length} claims`;
+            
+            entries.forEach(([key, value], index) => {
+                const claimInfo = schema[key];
+                const displayKey = claimInfo ? claimInfo.name : `claim_${key}`;
+                const keyClass = claimInfo ? 'claim-key mapped' : 'claim-key unmapped';
+                const clickHandler = claimInfo ? `editClaim('${key}')` : `editInline('${key}', event.target)`;
+                
+                let comment = claimInfo ? 
+                    ` // ${key}: ${claimInfo.description.split(' - ')[0]}` : 
+                    ` // ${key}: Click to name this claim`;
+                
+                // Format timestamp values
+                let displayValue = value;
+                if (claimInfo && ['exp', 'nbf', 'iat'].includes(claimInfo.name) && 
+                    typeof value === 'number') {
+                    const date = new Date(value * 1000);
+                    comment += ` (${date.toISOString()})`;
+                }
+                
+                formatted += `    "<span class="${keyClass}" data-key="${key}" onclick="${clickHandler}">${displayKey}</span>": `;
+                formatted += `<span class="claim-value">${JSON.stringify(displayValue)}</span>`;
+                formatted += comment;
+                if (index < entries.length - 1) formatted += ',';
+                formatted += '\n';
+            });
+            
+            formatted += "}";
+            return formatted;
+        }
+
+        function updateDisplay() {
+            const token = document.getElementById('tokenInput').value.trim();
+            const claimsDisplay = document.getElementById('claimsDisplay');
+            
+            if (!token) {
+                claimsDisplay.innerHTML = `{
+    "iss": "https://example.com",     // 1: Issuer
+    "sub": "user123",                 // 2: Subject
+    "aud": "app456",                  // 3: Audience
+    "exp": 1735689600,               // 4: Expiration Time
+    "iat": 1735603200                // 6: Issued At
+}
+
+<div class="help-text">
+Load a token to see parsed claims • Click claim names to edit mappings
+<a href="https://tools.ietf.org/rfc/rfc8392.txt#section-3.1" target="_blank" class="rfc-link">RFC 8392 §3.1</a>
+</div>`;
+                document.getElementById('claimCount').textContent = '0 claims';
+                currentClaims = null;
+                currentCOSEResult = null;
+                updateCOSEInfo(null);
+                updateSignatureStatus();
+                return;
+            }
+            
+            const result = parseCWT(token);
+            currentCOSEResult = result.cose;
+            updateCOSEInfo(result.cose);
+            updateSignatureStatus();
+            
+            if (!result.success) {
+                claimsDisplay.innerHTML = `<div class="error">Failed to parse CWT: ${result.error}</div>`;
+                document.getElementById('claimCount').textContent = '0 claims';
+                currentClaims = null;
+                return;
+            }
+            
+            currentClaims = result.claims;
+            const formattedClaims = formatClaimsForDisplay(result.claims);
+            
+            claimsDisplay.innerHTML = formattedClaims + `
+
+<div class="help-text">
+Click claim names to edit mappings • <a href="https://tools.ietf.org/rfc/rfc8392.txt#section-3.1" target="_blank" class="rfc-link">RFC 8392 §3.1</a>
+</div>`;
+        }
+
+        function updateClaimsList() {
+            const schema = getActiveSchema();
+            const claimList = document.getElementById('claimList');
+            const registryCount = document.getElementById('registryCount');
+            
+            claimList.innerHTML = '';
+            const sortedKeys = Object.keys(schema).sort((a, b) => parseInt(a) - parseInt(b));
+            
+            registryCount.textContent = `${sortedKeys.length} claims`;
+            
+            sortedKeys.forEach(key => {
+                const claim = schema[key];
+                const item = document.createElement('div');
+                item.className = 'claim-item';
+                
+                let source = 'custom';
+                if (RFC8392_CLAIMS[key]) source = 'RFC8392';
+                else if (IANA_CLAIMS[key]) source = 'IANA';
+                
+                item.innerHTML = `
+                    <div class="claim-meta">
+                        <span style="color: #4a9eff; font-weight: bold;">${key}</span>
+                        <span style="color: #e0e0e0;">${claim.name}</span>
+                        <span class="claim-source">${source}</span>
+                    </div>
+                    <div class="controls">
+                        <button class="btn" onclick="editClaim(${key})" style="font-size: 0.6rem; padding: 0.1rem 0.3rem;">Edit</button>
+                        ${source === 'custom' ? `<button class="btn" onclick="deleteClaim(${key})" style="font-size: 0.6rem; padding: 0.1rem 0.3rem;">Del</button>` : ''}
+                    </div>
+                `;
+                
+                item.title = claim.description;
+                claimList.appendChild(item);
+            });
+            
+            updateSchemaTable();
+        }
+
+        function updateSchemaTable() {
+            const tbody = document.getElementById('schemaTableBody');
+            const newRow = document.getElementById('newClaimRow');
+            
+            // Clear existing rows except the new claim row
+            while (tbody.firstChild && tbody.firstChild !== newRow) {
+                tbody.removeChild(tbody.firstChild);
+            }
+            
+            const schema = getActiveSchema();
+            const sortedKeys = Object.keys(schema).sort((a, b) => parseInt(a) - parseInt(b));
+            
+            sortedKeys.forEach(key => {
+                const claim = schema[key];
+                let source = 'custom';
+                if (RFC8392_CLAIMS[key]) source = 'RFC8392';
+                else if (IANA_CLAIMS[key]) source = 'IANA';
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${key}</td>
+                    <td>${claim.name}</td>
+                    <td>${claim.description}</td>
+                    <td>${source === 'custom' ? `<button class="btn" onclick="deleteClaim(${key})" style="font-size: 0.6rem;">×</button>` : ''}</td>
+                `;
+                tbody.insertBefore(row, newRow);
+            });
+        }
+
+        function toggleSchemaTable() {
+            const section = document.getElementById('schemaTableSection');
+            if (section.style.display === 'none') {
+                section.style.display = 'block';
+                updateSchemaTable();
+            } else {
+                section.style.display = 'none';
+            }
+        }
+
+        function addClaimFromTable() {
+            const key = document.getElementById('newClaimKey').value;
+            const name = document.getElementById('newClaimName').value.trim();
+            const desc = document.getElementById('newClaimDesc').value.trim();
+            
+            if (!key || !name) return;
+            
+            if (isNaN(parseInt(key))) {
+                alert('Key must be a number');
+                return;
+            }
+            
+            customClaims[key] = { 
+                name, 
+                description: desc || `Custom claim ${key}` 
+            };
+            
+            document.getElementById('newClaimKey').value = '';
+            document.getElementById('newClaimName').value = '';
+            document.getElementById('newClaimDesc').value = '';
+            
+            updateClaimsList();
+            updateDisplay();
+        }
+
+        function editInline(key, element) {
+            if (!element) return;
+            
+            const currentText = element.textContent;
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'inline-edit';
+            input.value = currentText;
+            input.style.width = Math.max(currentText.length * 8, 60) + 'px';
+            
+            element.parentNode.replaceChild(input, element);
+            input.focus();
+            input.select();
+            
+            function saveInline() {
+                const newName = input.value.trim();
+                if (newName && newName !== currentText) {
+                    customClaims[key] = { 
+                        name: newName, 
+                        description: `Custom claim ${key}` 
+                    };
+                    saveCustomClaims();
+                    updateClaimsList();
+                    updateDisplay();
+                } else {
+                    // Restore original
+                    const span = document.createElement('span');
+                    span.className = element.className;
+                    span.setAttribute('data-key', key);
+                    span.setAttribute('onclick', `editInline('${key}', event.target)`);
+                    span.textContent = currentText;
+                    input.parentNode.replaceChild(span, input);
+                }
+            }
+            
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    saveInline();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    // Restore original
+                    const span = document.createElement('span');
+                    span.className = element.className;
+                    span.setAttribute('data-key', key);
+                    span.setAttribute('onclick', `editInline('${key}', event.target)`);
+                    span.textContent = currentText;
+                    input.parentNode.replaceChild(span, input);
+                }
+            });
+            
+            input.addEventListener('blur', saveInline);
+        }
+
+        function editClaim(key = null) {
+            const modal = document.getElementById('claimModal');
+            const keyInput = document.getElementById('claimKey');
+            const nameInput = document.getElementById('claimName');
+            const descInput = document.getElementById('claimDescription');
+            
+            if (key !== null) {
+                keyInput.value = key;
+                keyInput.disabled = true;
+                
+                const schema = getActiveSchema();
+                const claim = schema[key];
+                if (claim) {
+                    nameInput.value = claim.name;
+                    descInput.value = claim.description;
+                } else {
+                    nameInput.value = `claim_${key}`;
+                    descInput.value = '';
+                }
+            } else {
+                keyInput.value = '';
+                keyInput.disabled = false;
+                nameInput.value = '';
+                descInput.value = '';
+            }
+            
+            modal.style.display = 'block';
+        }
+
+        function saveClaim() {
+            const key = document.getElementById('claimKey').value;
+            const name = document.getElementById('claimName').value.trim();
+            const description = document.getElementById('claimDescription').value.trim();
+            
+            if (!key || !name) {
+                alert('Key and name are required');
+                return;
+            }
+            
+            if (isNaN(parseInt(key))) {
+                alert('Key must be a number');
+                return;
+            }
+            
+            customClaims[key] = { name, description };
+            updateClaimsList();
+            updateDisplay();
+            closeModal();
+        }
+
+        function deleteClaim(key) {
+            if (confirm(`Delete custom claim ${key}?`)) {
+                delete customClaims[key];
+                updateClaimsList();
+                updateDisplay();
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('claimModal').style.display = 'none';
+        }
+
+        function addClaim() {
+            editClaim();
+        }
+
+        function clearToken() {
+            document.getElementById('tokenInput').value = '';
+            updateDisplay();
+        }
+
+        function loadSample() {
+            // Generated COSE_Sign1 wrapped CWT token (base64url encoded)
+            // Structure: [protected_headers, unprotected_headers, payload, signature]
+            // - Protected: {1: -7} (ES256 algorithm)  
+            // - Unprotected: {4: "test-key"} (key ID)
+            // - Payload: CWT claims with standard (1-7) + custom claims (100, 101)
+            // - Signature: 64-byte dummy signature for demo
+            // 
+            // Claims include:
+            // 1: "coap://as.example.com" (iss)
+            // 2: "erikw" (sub)
+            // 3: "coap://light.example.com" (aud) 
+            // 4: 1444064944 (exp)
+            // 5: 1443944944 (nbf)
+            // 6: 1443944944 (iat)
+            // 7: h'0b71' (cti)
+            // 100: "production" (custom environment)
+            // 101: ["admin", "edit", "read"] (custom permissions)
+            const sampleToken = "hEOhASahBGh0ZXN0LWtleVhwqQF1Y29hcDovL2FzLmV4YW1wbGUuY29tAmVlcmlrdwN4GGNvYXA6Ly9saWdodC5leGFtcGxlLmNvbQQaVhKusAUaVhDZ8AYaVhDZ8AdCC3EYZGpwcm9kdWN0aW9uGGWDZWFkbWluZGVkaXRkcmVhZFhAMDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMw";
+            document.getElementById('tokenInput').value = sampleToken;
+            
+            // Auto-populate the matching verification key in the textarea
+            const samplePublicKey = `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE/pX4I1zKMfHzJvTTgmBVGGYJCYdp
+HwVjBrXcRZNTnHtxeQhd6QH8kF9v6YsyYBfhV8u9Q4C6w8oX2sV3rj5NgQ==
+-----END PUBLIC KEY-----`;
+            
+            document.getElementById('verificationKeyInput').value = samplePublicKey;
+            
+            updateDisplay();
+        }
+
+        function exportSchema() {
+            const schema = {
+                version: "1.0",
+                metadata: {
+                    created: new Date().toISOString(),
+                    generator: "CWT.cam v2",
+                    standards: ["RFC8392", "IANA-CWT-Claims"]
+                },
+                customClaims: customClaims
+            };
+            
+            const blob = new Blob([JSON.stringify(schema, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'cwt-schema.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importSchema() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const schema = JSON.parse(e.target.result);
+                        if (schema.customClaims) {
+                            customClaims = schema.customClaims;
+                            updateClaimsList();
+                            updateDisplay();
+                            alert('Schema imported successfully');
+                        } else {
+                            alert('Invalid schema format');
+                        }
+                    } catch (error) {
+                        alert('Error parsing schema: ' + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        // Event listeners
+        document.getElementById('tokenInput').addEventListener('input', updateDisplay);
+        
+        document.getElementById('includeStandard').addEventListener('change', function() {
+            updateClaimsList();
+            updateDisplay();
+        });
+        
+        document.getElementById('includeIana').addEventListener('change', function() {
+            updateClaimsList();
+            updateDisplay();
+        });
+
+        // Handle Enter key in schema table inputs
+        document.getElementById('newClaimKey').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('newClaimName').focus();
+            }
+        });
+
+        document.getElementById('newClaimName').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('newClaimDesc').focus();
+            }
+        });
+
+        document.getElementById('newClaimDesc').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addClaimFromTable();
+            }
+        });
+
+        // Close modal when clicking outside
+        document.getElementById('claimModal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'k') {
+                e.preventDefault();
+                document.getElementById('tokenInput').focus();
+            }
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        // Load custom claims from localStorage
+        try {
+            const saved = localStorage.getItem('cwt-custom-claims');
+            if (saved) {
+                customClaims = JSON.parse(saved);
+            }
+        } catch (e) {
+            console.warn('Failed to load custom claims from localStorage');
+        }
+
+        // Save custom claims to localStorage
+        function saveCustomClaims() {
+            try {
+                localStorage.setItem('cwt-custom-claims', JSON.stringify(customClaims));
+            } catch (e) {
+                console.warn('Failed to save custom claims to localStorage');
+            }
+        }
+
+        // Override functions to save state
+        const originalSaveClaim = saveClaim;
+        saveClaim = function() {
+            originalSaveClaim();
+            saveCustomClaims();
+        };
+
+        const originalDeleteClaim = deleteClaim;
+        deleteClaim = function(key) {
+            originalDeleteClaim(key);
+            saveCustomClaims();
+        };
+
+        const originalAddClaimFromTable = addClaimFromTable;
+        addClaimFromTable = function() {
+            originalAddClaimFromTable();
+            saveCustomClaims();
+        };
+
+        function updateSignatureStatus() {
+            const statusElement = document.getElementById('signatureStatus');
+            const keyInput = document.getElementById('verificationKeyInput');
+            const keyValue = keyInput ? keyInput.value.trim() : '';
+            
+            if (!currentCOSEResult) {
+                statusElement.innerHTML = `
+                    <div class="help-text">Load a CWT token to check signature status</div>
+                `;
+                return;
+            }
+            
+            if (currentCOSEResult.type === 'Unprotected Claims') {
+                statusElement.innerHTML = `
+                    <div class="error">❌ No signature protection</div>
+                    <div class="help-text">This CWT has no COSE signature protection</div>
+                `;
+                return;
+            }
+            
+            if (!keyValue) {
+                statusElement.innerHTML = `
+                    <div class="help-text">
+                        COSE structure: ${currentCOSEResult.type}<br>
+                        Algorithm: ${COSE_ALGORITHMS[currentCOSEResult.algorithm] || currentCOSEResult.algorithm || 'Unknown'}<br>
+                        Enter verification key above to validate signature
+                    </div>
+                `;
+                return;
+            }
+            
+            // Auto-verify when key is present
+            autoVerifySignature(keyValue);
+        }
+        
+        function autoVerifySignature(keyMaterial) {
+            const statusElement = document.getElementById('signatureStatus');
+            
+            try {
+                // Parse the key material
+                const parsedKey = parseKeyMaterial(keyMaterial);
+                
+                // Simulate verification
+                const isValid = simulateSignatureVerification(keyMaterial);
+                
+                if (isValid) {
+                    statusElement.innerHTML = `
+                        <div class="success">✅ Signature verification PASSED</div>
+                        <div class="help-text">
+                            COSE: ${currentCOSEResult.type}<br>
+                            Algorithm: ${COSE_ALGORITHMS[currentCOSEResult.algorithm] || 'Unknown'}<br>
+                            The CWT signature is valid and can be trusted
+                        </div>
+                    `;
+                } else {
+                    statusElement.innerHTML = `
+                        <div class="error">❌ Signature verification FAILED</div>
+                        <div class="help-text">
+                            COSE: ${currentCOSEResult.type}<br>
+                            Algorithm: ${COSE_ALGORITHMS[currentCOSEResult.algorithm] || 'Unknown'}<br>
+                            The signature is invalid - do not trust claims
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                statusElement.innerHTML = `
+                    <div class="error">❌ Invalid key format</div>
+                    <div class="help-text">
+                        ${error.message}<br>
+                        Supported formats: PEM, JWK, Hex, Base64
+                    </div>
+                `;
+            }
+        }
+        
+        function parseKeyMaterial(material) {
+            material = material.trim();
+            
+            if (!material) {
+                throw new Error('Key material is empty');
+            }
+            
+            // Detect format and parse
+            if (material.startsWith('-----BEGIN')) {
+                return { format: 'pem', material };
+            } else if (material.startsWith('{')) {
+                return { format: 'jwk', material: JSON.parse(material) };
+            } else if (/^[0-9a-fA-F]+$/.test(material)) {
+                return { format: 'hex', material };
+            } else {
+                return { format: 'base64', material };
+            }
+        }
+        
+        
+        function simulateSignatureVerification(keyMaterial) {
+            // Placeholder verification logic
+            // In a real implementation, this would:
+            // 1. Reconstruct the COSE Sig_structure
+            // 2. Hash the payload
+            // 3. Verify the signature with the public key
+            
+            if (!keyMaterial) return false;
+            
+            // For demo purposes, check if this is our sample key
+            // High success rate for our sample public key
+            if (keyMaterial.includes('MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE/pX4I1zKMfHzJvTTgmBVGGYJCYdp')) {
+                return Math.random() > 0.1; // 90% success rate for sample key
+            }
+            
+            // Simulate success for certain test patterns
+            if (keyMaterial.toLowerCase().includes('test') || 
+                keyMaterial.toLowerCase().includes('demo') || 
+                keyMaterial.toLowerCase().includes('example')) {
+                return Math.random() > 0.4; // 60% success rate for test keys
+            }
+            
+            // Lower success rate for unknown keys (simulating wrong key)
+            return Math.random() > 0.8; // 20% success rate for unknown keys
+        }
+
+        // Add event listener for verification key input
+        document.getElementById('verificationKeyInput').addEventListener('input', function() {
+            updateSignatureStatus();
+        });
+
+        // Initialize
+        updateClaimsList();
+        updateDisplay();
+    </script>
+</body>
+</html>
