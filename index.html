@@ -26,9 +26,10 @@
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            min-height: 100vh;
+            height: 100vh;
             background: #0a0a0a;
             box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
         }
 
         .header {
@@ -67,7 +68,7 @@
         .main {
             display: grid;
             grid-template-columns: 1fr 350px;
-            min-height: calc(100vh - 60px);
+            min-height: 100vh;
         }
 
         .decoder-panel {
@@ -211,7 +212,6 @@
         }
 
         .claim-list {
-            max-height: 300px;
             overflow-y: auto;
         }
 
