@@ -1032,6 +1032,25 @@ Load a token to see parsed claims • Click claim names to edit mappings
             return bytes.buffer;
         }
 
+        function isHexString(str) {
+            const cleaned = str.replace(/\s/g, '').replace(/^0x/i, '');
+            // Must be even length and only contain hex characters
+            // Minimum reasonable length for a CWT token (let's say 20 chars = 10 bytes minimum)
+            return cleaned.length >= 20 && 
+                   cleaned.length % 2 === 0 && 
+                   /^[0-9a-fA-F]+$/.test(cleaned);
+        }
+
+        function isBase64String(str) {
+            const cleaned = str.replace(/\s/g, '');
+            // Must be reasonable length for a CWT token (minimum ~15 chars)
+            // Base64(URL) uses A-Z, a-z, 0-9, +/= or -_= (URL safe)
+            // Should not be valid hex (to avoid ambiguity)
+            return cleaned.length >= 15 && 
+                   !isHexString(cleaned) &&
+                   /^[A-Za-z0-9+/\-_]*={0,2}$/.test(cleaned);
+        }
+
         // CBOR Encoder for browser
         class CBOREncoder {
             constructor() {
@@ -1197,8 +1216,24 @@ Load a token to see parsed claims • Click claim names to edit mappings
                     return this.importPEMKey(keyMaterial);
                 } else if (keyMaterial.startsWith('{')) {
                     // JWK format
-                    const jwk = JSON.parse(keyMaterial);
-                    return crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+                    try {
+                        const jwk = JSON.parse(keyMaterial);
+                        
+                        // WebCrypto is strict about JWK format - only include fields it recognizes
+                        const cleanJwk = {
+                            kty: jwk.kty,
+                            crv: jwk.crv,
+                            x: jwk.x,
+                            y: jwk.y
+                        };
+                        
+                        return await crypto.subtle.importKey('jwk', cleanJwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+                    } catch (error) {
+                        if (error.message.includes('Data provided to an operation does not meet requirements')) {
+                            throw new Error('Invalid EC key: The x,y coordinates do not form a valid point on the P-256 curve');
+                        }
+                        throw error;
+                    }
                 } else if (/^[0-9a-fA-F]+$/.test(keyMaterial)) {
                     // Hex format - convert to raw
                     const keyBytes = this.hexToBytes(keyMaterial);
@@ -1478,10 +1513,26 @@ Load a token to see parsed claims • Click claim names to edit mappings
         function parseCWT(token) {
             try {
                 let buffer;
-                if (currentInputFormat === 'hex') {
-                    buffer = hexDecode(token.trim());
+                
+                // Auto-detect format
+                const trimmedToken = token.trim();
+                let detectedFormat = currentInputFormat;
+                
+                // Auto-detect hex format when in base64 mode
+                if (currentInputFormat === 'base64' && isHexString(trimmedToken)) {
+                    detectedFormat = 'hex';
+                    setInputFormat('hex');
+                }
+                // Auto-detect base64 format when in hex mode
+                else if (currentInputFormat === 'hex' && isBase64String(trimmedToken)) {
+                    detectedFormat = 'base64';
+                    setInputFormat('base64');
+                }
+                
+                if (detectedFormat === 'hex') {
+                    buffer = hexDecode(trimmedToken);
                 } else {
-                    buffer = base64UrlDecode(token.trim());
+                    buffer = base64UrlDecode(trimmedToken);
                 }
                 
                 const coseResult = parseCOSEStructure(buffer);
