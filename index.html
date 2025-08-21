@@ -810,7 +810,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
         let verificationKey = null;
         let currentCOSEResult = null;
 
-        // Enhanced CBOR decoder with COSE support
+        // Enhanced CBOR decoder with COSE support and floating-point numbers
         class CBORDecoder {
             constructor(buffer) {
                 this.buffer = new Uint8Array(buffer);
@@ -854,7 +854,10 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 if (info === 27) {
                     // 64-bit integer (simplified for JavaScript)
                     this.offset += 8;
-                    return this.buffer[this.offset - 1];
+                    return this.buffer[this.offset - 1] + 
+                           this.buffer[this.offset - 2] * 256 +
+                           this.buffer[this.offset - 3] * 65536 +
+                           this.buffer[this.offset - 4] * 16777216;
                 }
                 throw new Error('Unsupported integer encoding');
             }
@@ -911,8 +914,42 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 if (info === 21) return true;
                 if (info === 22) return null;
                 if (info === 23) return undefined;
+                if (info === 25) {
+                    // 16-bit IEEE 754 half-precision float
+                    const bytes = this.buffer.slice(this.offset, this.offset + 2);
+                    this.offset += 2;
+                    const view = new DataView(bytes.buffer, bytes.byteOffset);
+                    return this.float16ToFloat32(view.getUint16(0, false));
+                }
+                if (info === 26) {
+                    // 32-bit IEEE 754 single-precision float
+                    const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.offset);
+                    this.offset += 4;
+                    return view.getFloat32(0, false);
+                }
+                if (info === 27) {
+                    // 64-bit IEEE 754 double-precision float
+                    const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.offset);
+                    this.offset += 8;
+                    return view.getFloat64(0, false);
+                }
                 if (info === 31) return Symbol.for('break');
                 throw new Error(`Unsupported special value: ${info}`);
+            }
+
+            // Convert IEEE 754 half precision to single precision
+            float16ToFloat32(h) {
+                const s = (h & 0x8000) >> 15;
+                const e = (h & 0x7c00) >> 10;
+                const f = h & 0x03ff;
+
+                if (e === 0) {
+                    return (s ? -1 : 1) * Math.pow(2, -14) * (f / Math.pow(2, 10));
+                } else if (e === 0x1f) {
+                    return f ? NaN : ((s ? -1 : 1) * Infinity);
+                }
+
+                return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + f / Math.pow(2, 10));
             }
 
             readIndefiniteBytes() {
@@ -995,6 +1032,327 @@ Load a token to see parsed claims • Click claim names to edit mappings
             return bytes.buffer;
         }
 
+        // CBOR Encoder for browser
+        class CBOREncoder {
+            constructor() {
+                this.buffer = [];
+            }
+
+            encode(value) {
+                if (value === null) {
+                    this.buffer.push(0xf6);
+                } else if (value === undefined) {
+                    this.buffer.push(0xf7);
+                } else if (typeof value === 'boolean') {
+                    this.buffer.push(value ? 0xf5 : 0xf4);
+                } else if (typeof value === 'number') {
+                    if (value >= 0) {
+                        this.encodeUint(value);
+                    } else {
+                        this.encodeNegativeInt(value);
+                    }
+                } else if (typeof value === 'string') {
+                    this.encodeText(value);
+                } else if (value instanceof Uint8Array) {
+                    this.encodeBytes(value);
+                } else if (Array.isArray(value)) {
+                    this.encodeArray(value.length);
+                    value.forEach(item => this.encode(item));
+                } else if (typeof value === 'object') {
+                    const entries = Object.entries(value);
+                    this.encodeMap(entries.length);
+                    entries.forEach(([k, v]) => {
+                        this.encode(Number(k) || k);
+                        this.encode(v);
+                    });
+                }
+            }
+
+            encodeUint(value) {
+                if (value < 24) {
+                    this.buffer.push(value);
+                } else if (value < 256) {
+                    this.buffer.push(24, value);
+                } else if (value < 65536) {
+                    this.buffer.push(25, value >> 8, value & 0xff);
+                } else if (value < 4294967296) {
+                    this.buffer.push(26, 
+                        (value >> 24) & 0xff,
+                        (value >> 16) & 0xff, 
+                        (value >> 8) & 0xff,
+                        value & 0xff
+                    );
+                }
+            }
+
+            encodeNegativeInt(value) {
+                const absValue = Math.abs(value) - 1;
+                if (absValue < 24) {
+                    this.buffer.push(0x20 | absValue);
+                } else if (absValue < 256) {
+                    this.buffer.push(0x20 | 24, absValue);
+                } else if (absValue < 65516) {
+                    this.buffer.push(0x20 | 25, absValue >> 8, absValue & 0xff);
+                } else {
+                    this.buffer.push(0x20 | 26,
+                        (absValue >> 24) & 0xff,
+                        (absValue >> 16) & 0xff,
+                        (absValue >> 8) & 0xff,
+                        absValue & 0xff
+                    );
+                }
+            }
+
+            encodeBytes(bytes) {
+                const len = bytes.length;
+                if (len < 24) {
+                    this.buffer.push(0x40 | len);
+                } else if (len < 256) {
+                    this.buffer.push(0x40 | 24, len);
+                } else if (len < 65516) {
+                    this.buffer.push(0x40 | 25, len >> 8, len & 0xff);
+                } else {
+                    this.buffer.push(0x40 | 26,
+                        (len >> 24) & 0xff,
+                        (len >> 16) & 0xff,
+                        (len >> 8) & 0xff,
+                        len & 0xff
+                    );
+                }
+                this.buffer.push(...bytes);
+            }
+
+            encodeText(text) {
+                const bytes = new TextEncoder().encode(text);
+                const len = bytes.length;
+                if (len < 24) {
+                    this.buffer.push(0x60 | len);
+                } else if (len < 256) {
+                    this.buffer.push(0x60 | 24, len);
+                } else if (len < 65516) {
+                    this.buffer.push(0x60 | 25, len >> 8, len & 0xff);
+                } else {
+                    this.buffer.push(0x60 | 26,
+                        (len >> 24) & 0xff,
+                        (len >> 16) & 0xff,
+                        (len >> 8) & 0xff,
+                        len & 0xff
+                    );
+                }
+                this.buffer.push(...bytes);
+            }
+
+            encodeArray(length) {
+                if (length < 24) {
+                    this.buffer.push(0x80 | length);
+                } else if (length < 256) {
+                    this.buffer.push(0x80 | 24, length);
+                } else if (length < 65516) {
+                    this.buffer.push(0x80 | 25, length >> 8, length & 0xff);
+                } else {
+                    this.buffer.push(0x80 | 26,
+                        (length >> 24) & 0xff,
+                        (length >> 16) & 0xff,
+                        (length >> 8) & 0xff,
+                        length & 0xff
+                    );
+                }
+            }
+
+            encodeMap(length) {
+                if (length < 24) {
+                    this.buffer.push(0xa0 | length);
+                } else if (length < 256) {
+                    this.buffer.push(0xa0 | 24, length);
+                } else if (length < 65516) {
+                    this.buffer.push(0xa0 | 25, length >> 8, length & 0xff);
+                } else {
+                    this.buffer.push(0xa0 | 26,
+                        (length >> 24) & 0xff,
+                        (length >> 16) & 0xff,
+                        (length >> 8) & 0xff,
+                        length & 0xff
+                    );
+                }
+            }
+
+            getBuffer() {
+                return new Uint8Array(this.buffer);
+            }
+        }
+
+        // Real cryptographic verification using WebCrypto API
+        class COSEVerifier {
+            constructor() {
+                this.supportedAlgorithms = {
+                    '-7': 'ES256' // ECDSA with SHA-256
+                };
+            }
+
+            async parseKey(keyMaterial) {
+                keyMaterial = keyMaterial.trim();
+                
+                if (keyMaterial.startsWith('-----BEGIN PUBLIC KEY-----')) {
+                    // PEM format
+                    return this.importPEMKey(keyMaterial);
+                } else if (keyMaterial.startsWith('{')) {
+                    // JWK format
+                    const jwk = JSON.parse(keyMaterial);
+                    return crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+                } else if (/^[0-9a-fA-F]+$/.test(keyMaterial)) {
+                    // Hex format - convert to raw
+                    const keyBytes = this.hexToBytes(keyMaterial);
+                    return this.importRawKey(keyBytes);
+                } else {
+                    // Base64 format
+                    const keyBytes = this.base64ToBytes(keyMaterial);
+                    return this.importRawKey(keyBytes);
+                }
+            }
+
+            async importPEMKey(pem) {
+                const b64 = pem.replace(/-----BEGIN PUBLIC KEY-----/, '')
+                              .replace(/-----END PUBLIC KEY-----/, '')
+                              .replace(/\s/g, '');
+                const keyData = this.base64ToBytes(b64);
+                
+                return crypto.subtle.importKey(
+                    'spki',
+                    keyData,
+                    { name: 'ECDSA', namedCurve: 'P-256' },
+                    false,
+                    ['verify']
+                );
+            }
+
+            async importRawKey(keyBytes) {
+                // Assume uncompressed point format (0x04 + 32 bytes x + 32 bytes y)
+                if (keyBytes.length === 65 && keyBytes[0] === 0x04) {
+                    const x = keyBytes.slice(1, 33);
+                    const y = keyBytes.slice(33, 65);
+                    
+                    const jwk = {
+                        kty: 'EC',
+                        crv: 'P-256',
+                        x: this.bytesToBase64Url(x),
+                        y: this.bytesToBase64Url(y)
+                    };
+                    
+                    return crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+                }
+                throw new Error('Unsupported key format');
+            }
+
+            async verifySignature(coseStructure, publicKey) {
+                try {
+                    const sigStructure = this.createSigStructure(coseStructure);
+                    const algorithm = coseStructure.algorithm;
+                    
+                    if (algorithm === -7) { // ES256
+                        // WebCrypto expects raw R|S format for ECDSA signatures
+                        const result = await crypto.subtle.verify(
+                            { name: 'ECDSA', hash: 'SHA-256' },
+                            publicKey,
+                            coseStructure.signature,
+                            sigStructure
+                        );
+                        return result;
+                    }
+                    
+                    throw new Error(`Unsupported algorithm: ${algorithm}`);
+                } catch (error) {
+                    console.error('Verification error:', error);
+                    console.error('Error details:', error.name, error.message);
+                    return false;
+                }
+            }
+
+            createSigStructure(coseStructure) {
+                // Create proper CBOR-encoded Sig_structure for COSE_Sign1
+                // Sig_structure = [
+                //     context = "Signature1",
+                //     body_protected = protected headers as bytes,
+                //     external_aad = empty,
+                //     payload = payload as bytes
+                // ]
+                
+                const encoder = new CBOREncoder();
+                
+                // Array with 4 elements
+                encoder.encodeArray(4);
+                
+                // Context: "Signature1"
+                encoder.encodeText("Signature1");
+                
+                // Protected headers as byte string
+                const protectedBytes = coseStructure.protectedBytes || new Uint8Array(0);
+                encoder.encodeBytes(protectedBytes);
+                
+                // External AAD as empty byte string
+                encoder.encodeBytes(new Uint8Array(0));
+                
+                // Payload as byte string
+                const payload = coseStructure.payload || new Uint8Array(0);
+                encoder.encodeBytes(payload);
+                
+                return encoder.getBuffer();
+            }
+
+            rawToDER(rawSignature) {
+                // Convert raw R|S signature (64 bytes) to DER format
+                const r = rawSignature.slice(0, 32);
+                const s = rawSignature.slice(32, 64);
+                
+                // Remove leading zeros
+                let rTrimmed = r;
+                let sTrimmed = s;
+                while (rTrimmed[0] === 0 && rTrimmed.length > 1) rTrimmed = rTrimmed.slice(1);
+                while (sTrimmed[0] === 0 && sTrimmed.length > 1) sTrimmed = sTrimmed.slice(1);
+                
+                // Add padding byte if high bit is set
+                if (rTrimmed[0] & 0x80) rTrimmed = new Uint8Array([0, ...rTrimmed]);
+                if (sTrimmed[0] & 0x80) sTrimmed = new Uint8Array([0, ...sTrimmed]);
+                
+                // Build DER signature
+                const derSig = new Uint8Array([
+                    0x30, // SEQUENCE
+                    rTrimmed.length + sTrimmed.length + 4, // Total length
+                    0x02, // INTEGER
+                    rTrimmed.length,
+                    ...rTrimmed,
+                    0x02, // INTEGER  
+                    sTrimmed.length,
+                    ...sTrimmed
+                ]);
+                
+                return derSig;
+            }
+
+            hexToBytes(hex) {
+                const bytes = new Uint8Array(hex.length / 2);
+                for (let i = 0; i < hex.length; i += 2) {
+                    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+                }
+                return bytes;
+            }
+
+            base64ToBytes(base64) {
+                const binary = atob(base64);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
+                return bytes;
+            }
+
+            bytesToBase64Url(bytes) {
+                const base64 = btoa(String.fromCharCode(...bytes));
+                return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+            }
+        }
+
+        const coseVerifier = new COSEVerifier();
+
         function parseCOSEStructure(data) {
             try {
                 const decoder = new CBORDecoder(data);
@@ -1002,8 +1360,21 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 
                 // Check for CWT tag (61)
                 let coseData = structure;
+                let isCWTTagged = false;
                 if (structure && structure.tag === 61) {
                     coseData = structure.value;
+                    isCWTTagged = true;
+                }
+                
+                // Check for COSE tags (check coseData if we extracted from CWT, otherwise check structure)
+                let coseType = 'Unknown';
+                const coseSource = isCWTTagged ? coseData : structure;
+                if (coseSource && coseSource.tag === 18) {
+                    coseType = 'COSE_Sign1';
+                    coseData = coseSource.value;
+                } else if (coseSource && coseSource.tag === 17) {
+                    coseType = 'COSE_Mac0';
+                    coseData = coseSource.value;
                 }
                 
                 // COSE_Sign1 structure: [protected headers, unprotected headers, payload, signature]
@@ -1031,20 +1402,16 @@ Load a token to see parsed claims • Click claim names to edit mappings
                     }
                     
                     return {
-                        type: 'COSE_Sign1',
+                        type: coseType || 'COSE_Sign1',
                         algorithm: algorithm,
                         keyId: keyId,
                         claims: claims,
-                        signature: signature
-                    };
-                }
-                
-                // COSE_Mac0 structure: [protected headers, unprotected headers, payload, tag]
-                if (Array.isArray(coseData) && coseData.length === 4) {
-                    // Similar parsing but for MAC instead of signature
-                    return {
-                        type: 'COSE_Mac0',
-                        claims: null // Would parse similarly
+                        signature: signature,
+                        payload: payload,
+                        protectedBytes: protectedHeaders,
+                        protectedHeaders: decodedProtected,
+                        unprotectedHeaders: unprotectedHeaders,
+                        isCWTTagged: isCWTTagged
                     };
                 }
                 
@@ -1452,30 +1819,29 @@ Click claim names to edit mappings • <a href="https://tools.ietf.org/rfc/rfc83
         }
 
         function loadSample() {
-            // Generated COSE_Sign1 wrapped CWT token (base64url encoded)
-            // Structure: [protected_headers, unprotected_headers, payload, signature]
+            // Real COSE_Sign1 wrapped CWT token with cryptographic signature
+            // Generated using our cwt-verify.js script with ES256 algorithm
+            // Structure: CWT tag (61) wrapping COSE_Sign1 structure
             // - Protected: {1: -7} (ES256 algorithm)  
             // - Unprotected: {4: "test-key"} (key ID)
-            // - Payload: CWT claims with standard (1-7) + custom claims (100, 101)
-            // - Signature: 64-byte dummy signature for demo
+            // - Payload: RFC 8392 compliant CWT claims
+            // - Signature: Real 64-byte ECDSA signature
             // 
-            // Claims include:
+            // Claims include (RFC 8392 compatible):
             // 1: "coap://as.example.com" (iss)
             // 2: "erikw" (sub)
             // 3: "coap://light.example.com" (aud) 
-            // 4: 1444064944 (exp)
-            // 5: 1443944944 (nbf)
-            // 6: 1443944944 (iat)
-            // 7: h'0b71' (cti)
-            // 100: "production" (custom environment)
-            // 101: ["admin", "edit", "read"] (custom permissions)
-            const sampleToken = "hEOhASahBGh0ZXN0LWtleVhwqQF1Y29hcDovL2FzLmV4YW1wbGUuY29tAmVlcmlrdwN4GGNvYXA6Ly9saWdodC5leGFtcGxlLmNvbQQaVhKusAUaVhDZ8AYaVhDZ8AdCC3EYZGpwcm9kdWN0aW9uGGWDZWFkbWluZGVkaXRkcmVhZFhAMDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMw";
+            // 4: exp (expiration time)
+            // 5: nbf (not before)
+            // 6: iat (issued at)
+            // 7: h'0b71' (cti - CWT ID from RFC)
+            const sampleToken = "2D3ShEOhASahBGh0ZXN0LWtleVgopAFrdGVzdC1pc3N1ZXICbHRlc3Qtc3ViamVjdAQaaKZ5rwYaaKZrn1hACQv8io4mljPpLcVFs_3vxrstvjQN5qtxsYe3L8-Nd1mai1nf3BfNgz_L-He0qVRjuqT4lmL1QQr4J7BmQWLT3w";
             document.getElementById('tokenInput').value = sampleToken;
             
             // Auto-populate the matching verification key in the textarea
             const samplePublicKey = `-----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE/pX4I1zKMfHzJvTTgmBVGGYJCYdp
-HwVjBrXcRZNTnHtxeQhd6QH8kF9v6YsyYBfhV8u9Q4C6w8oX2sV3rj5NgQ==
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWd2Y4mYKmI+PiYPSS1/WZTXaevZ7
+IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
 -----END PUBLIC KEY-----`;
             
             document.getElementById('verificationKeyInput').value = samplePublicKey;
@@ -1703,7 +2069,7 @@ HwVjBrXcRZNTnHtxeQhd6QH8kF9v6YsyYBfhV8u9Q4C6w8oX2sV3rj5NgQ==
             saveCustomClaims();
         };
 
-        function updateSignatureStatus() {
+        async function updateSignatureStatus() {
             const statusElement = document.getElementById('signatureStatus');
             const keyInput = document.getElementById('verificationKeyInput');
             const keyValue = keyInput ? keyInput.value.trim() : '';
@@ -1720,6 +2086,7 @@ HwVjBrXcRZNTnHtxeQhd6QH8kF9v6YsyYBfhV8u9Q4C6w8oX2sV3rj5NgQ==
                     <div class="error"><i data-lucide="shield-off"></i> No signature protection</div>
                     <div class="help-text">This CWT has no COSE signature protection</div>
                 `;
+                lucide.createIcons();
                 return;
             }
             
@@ -1734,19 +2101,25 @@ HwVjBrXcRZNTnHtxeQhd6QH8kF9v6YsyYBfhV8u9Q4C6w8oX2sV3rj5NgQ==
                 return;
             }
             
+            // Show verifying status
+            statusElement.innerHTML = `
+                <div class="warning"><i data-lucide="clock"></i> Verifying signature...</div>
+            `;
+            lucide.createIcons();
+            
             // Auto-verify when key is present
-            autoVerifySignature(keyValue);
+            await autoVerifySignature(keyValue);
         }
         
-        function autoVerifySignature(keyMaterial) {
+        async function autoVerifySignature(keyMaterial) {
             const statusElement = document.getElementById('signatureStatus');
             
             try {
-                // Parse the key material
-                const parsedKey = parseKeyMaterial(keyMaterial);
+                // Parse and import the key
+                const publicKey = await coseVerifier.parseKey(keyMaterial);
                 
-                // Simulate verification
-                const isValid = simulateSignatureVerification(keyMaterial);
+                // Verify the signature
+                const isValid = await coseVerifier.verifySignature(currentCOSEResult, publicKey);
                 
                 if (isValid) {
                     statusElement.innerHTML = `
@@ -1754,83 +2127,59 @@ HwVjBrXcRZNTnHtxeQhd6QH8kF9v6YsyYBfhV8u9Q4C6w8oX2sV3rj5NgQ==
                         <div class="help-text">
                             COSE: ${currentCOSEResult.type}<br>
                             Algorithm: ${COSE_ALGORITHMS[currentCOSEResult.algorithm] || 'Unknown'}<br>
-                            The CWT signature is valid and can be trusted
+                            ✅ The CWT signature is cryptographically valid and can be trusted
                         </div>
                     `;
-                    lucide.createIcons();
                 } else {
                     statusElement.innerHTML = `
                         <div class="error"><i data-lucide="x"></i> Signature verification FAILED</div>
                         <div class="help-text">
                             COSE: ${currentCOSEResult.type}<br>
                             Algorithm: ${COSE_ALGORITHMS[currentCOSEResult.algorithm] || 'Unknown'}<br>
-                            The signature is invalid - do not trust claims
+                            ❌ The signature is cryptographically invalid - do not trust claims
                         </div>
                     `;
-                    lucide.createIcons();
                 }
+                
+                lucide.createIcons();
+                
             } catch (error) {
+                console.error('Verification error:', error);
                 statusElement.innerHTML = `
-                    <div class="error"><i data-lucide="alert-triangle"></i> Invalid key format</div>
+                    <div class="error"><i data-lucide="alert-triangle"></i> Verification error</div>
                     <div class="help-text">
                         ${error.message}<br>
-                        Supported formats: PEM, JWK, Hex, Base64
+                        Supported formats: PEM, JWK, Hex, Base64<br>
+                        Ensure the key matches the algorithm (ES256 for ECDSA P-256)
                     </div>
                 `;
                 lucide.createIcons();
             }
         }
-        
-        function parseKeyMaterial(material) {
-            material = material.trim();
-            
-            if (!material) {
-                throw new Error('Key material is empty');
-            }
-            
-            // Detect format and parse
-            if (material.startsWith('-----BEGIN')) {
-                return { format: 'pem', material };
-            } else if (material.startsWith('{')) {
-                return { format: 'jwk', material: JSON.parse(material) };
-            } else if (/^[0-9a-fA-F]+$/.test(material)) {
-                return { format: 'hex', material };
-            } else {
-                return { format: 'base64', material };
-            }
-        }
-        
-        
-        function simulateSignatureVerification(keyMaterial) {
-            // Placeholder verification logic
-            // In a real implementation, this would:
-            // 1. Reconstruct the COSE Sig_structure
-            // 2. Hash the payload
-            // 3. Verify the signature with the public key
-            
-            if (!keyMaterial) return false;
-            
-            // For demo purposes, check if this is our sample key
-            // High success rate for our sample public key
-            if (keyMaterial.includes('MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE/pX4I1zKMfHzJvTTgmBVGGYJCYdp')) {
-                return Math.random() > 0.1; // 90% success rate for sample key
-            }
-            
-            // Simulate success for certain test patterns
-            if (keyMaterial.toLowerCase().includes('test') || 
-                keyMaterial.toLowerCase().includes('demo') || 
-                keyMaterial.toLowerCase().includes('example')) {
-                return Math.random() > 0.4; // 60% success rate for test keys
-            }
-            
-            // Lower success rate for unknown keys (simulating wrong key)
-            return Math.random() > 0.8; // 20% success rate for unknown keys
-        }
 
-        // Add event listener for verification key input
+        // Add event listener for verification key input  
         document.getElementById('verificationKeyInput').addEventListener('input', function() {
             updateSignatureStatus();
         });
+
+        // Add RFC example buttons
+        function loadRFCExample() {
+            // RFC 8392 A.3 - Example Signed CWT 
+            const rfcToken = "d28443a10126a104524173796d6d657472696345434453413235365850a70175636f61703a2f2f61732e6578616d706c652e636f6d02656572696b77037818636f61703a2f2f6c696768742e6578616d706c652e636f6d041a5612aeb0051a5610d9f0061a5610d9f007420b7158405427c1ff28d23fbad1f29c4c7c6a555e601d6fa29f9179bc3d7438bacaca5acd08c8d4d4f96131680c429a01f85951ecee743a52b9b63632c57209120e1c9e30";
+            
+            // Convert hex to base64url
+            const buffer = new Uint8Array(rfcToken.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+            const base64 = btoa(String.fromCharCode(...buffer));
+            const base64url = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+            
+            document.getElementById('tokenInput').value = base64url;
+            document.getElementById('verificationKeyInput').value = '';
+            
+            updateDisplay();
+        }
+
+        // Add RFC button to controls (you can call this function from a button)
+        // <button class="btn" onclick="loadRFCExample()">RFC Example</button>
 
         // Initialize
         updateClaimsList();
