@@ -654,7 +654,7 @@
                     <div id="signatureStatus">
                         <div class="help-text">
                             Enter a verification key above to automatically verify the CWT signature.
-                            Supports: PEM, JWK, Hex, Base64 formats for ECDSA/HMAC keys.
+                            Supports: PEM/JWK (ECDSA), JWK/Hex/Base64 (HMAC), auto-detects format and algorithm.
                         </div>
                     </div>
                 </div>
@@ -1225,7 +1225,11 @@ Load a token to see parsed claims • Click claim names to edit mappings
         class COSEVerifier {
             constructor() {
                 this.supportedAlgorithms = {
-                    '-7': 'ES256' // ECDSA with SHA-256
+                    '-7': 'ES256',  // ECDSA with SHA-256
+                    '4': 'HMAC256/64',   // HMAC 256/64
+                    '5': 'HMAC256/256',  // HMAC 256/256
+                    '6': 'HMAC384/384',  // HMAC 384/384
+                    '7': 'HMAC512/512'   // HMAC 512/512
                 };
             }
 
@@ -1247,11 +1251,21 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 } else if (/^[0-9a-fA-F\s]+$/.test(keyMaterial.replace(/^0x/i, ''))) {
                     setKeyFormat('hex');
                     const keyBytes = this.hexToBytes(keyMaterial);
-                    return this.importRawKey(keyBytes);
+                    // Try both ECDSA and HMAC
+                    try {
+                        return await this.importRawKey(keyBytes);
+                    } catch (error) {
+                        return await this.importHMACKey(keyBytes);
+                    }
                 } else {
                     setKeyFormat('base64');
                     const keyBytes = this.base64ToBytes(keyMaterial);
-                    return this.importRawKey(keyBytes);
+                    // Try both ECDSA and HMAC
+                    try {
+                        return await this.importRawKey(keyBytes);
+                    } catch (error) {
+                        return await this.importHMACKey(keyBytes);
+                    }
                 }
             }
 
@@ -1259,18 +1273,31 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 try {
                     const jwk = JSON.parse(keyMaterial);
                     
-                    // WebCrypto is strict about JWK format - only include fields it recognizes
-                    const cleanJwk = {
-                        kty: jwk.kty,
-                        crv: jwk.crv,
-                        x: jwk.x,
-                        y: jwk.y
-                    };
-                    
-                    return await crypto.subtle.importKey('jwk', cleanJwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+                    if (jwk.kty === 'EC') {
+                        // ECDSA key
+                        const cleanJwk = {
+                            kty: jwk.kty,
+                            crv: jwk.crv,
+                            x: jwk.x,
+                            y: jwk.y
+                        };
+                        
+                        return await crypto.subtle.importKey('jwk', cleanJwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+                    } else if (jwk.kty === 'oct') {
+                        // HMAC key (symmetric)
+                        const cleanJwk = {
+                            kty: jwk.kty,
+                            k: jwk.k
+                        };
+                        
+                        // Default to SHA-256, will be corrected during verification if needed
+                        return await crypto.subtle.importKey('jwk', cleanJwk, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+                    } else {
+                        throw new Error(`Unsupported JWK key type: ${jwk.kty}`);
+                    }
                 } catch (error) {
                     if (error.message.includes('Data provided to an operation does not meet requirements')) {
-                        throw new Error('Invalid EC key: The x,y coordinates do not form a valid point on the P-256 curve');
+                        throw new Error('Invalid key: The key data does not meet cryptographic requirements');
                     }
                     throw error;
                 }
@@ -1309,6 +1336,22 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 throw new Error('Unsupported key format');
             }
 
+            async importHMACKey(keyBytes, hashAlgorithm = 'SHA-256') {
+                // HMAC keys can be any length, typically 32+ bytes for good security
+                if (keyBytes.length < 16) {
+                    throw new Error('HMAC key too short (minimum 16 bytes recommended)');
+                }
+                
+                // Import HMAC key with specified hash algorithm
+                return crypto.subtle.importKey(
+                    'raw',
+                    keyBytes,
+                    { name: 'HMAC', hash: hashAlgorithm },
+                    false,
+                    ['verify']
+                );
+            }
+
             async verifySignature(coseStructure, publicKey) {
                 try {
                     const sigStructure = this.createSigStructure(coseStructure);
@@ -1319,6 +1362,39 @@ Load a token to see parsed claims • Click claim names to edit mappings
                         const result = await crypto.subtle.verify(
                             { name: 'ECDSA', hash: 'SHA-256' },
                             publicKey,
+                            coseStructure.signature,
+                            sigStructure
+                        );
+                        return result;
+                    }
+                    
+                    // HMAC algorithms
+                    if ([4, 5, 6, 7].includes(algorithm)) {
+                        let hashAlgorithm;
+                        switch (algorithm) {
+                            case 4: // HMAC 256/64
+                            case 5: // HMAC 256/256
+                                hashAlgorithm = 'SHA-256';
+                                break;
+                            case 6: // HMAC 384/384
+                                hashAlgorithm = 'SHA-384';
+                                break;
+                            case 7: // HMAC 512/512
+                                hashAlgorithm = 'SHA-512';
+                                break;
+                        }
+                        
+                        // Re-import key with correct hash if needed
+                        let hmacKey = publicKey;
+                        if (publicKey.algorithm.hash.name !== hashAlgorithm) {
+                            // Export raw key and re-import with correct hash
+                            const keyData = await crypto.subtle.exportKey('raw', publicKey);
+                            hmacKey = await this.importHMACKey(new Uint8Array(keyData), hashAlgorithm);
+                        }
+                        
+                        const result = await crypto.subtle.verify(
+                            { name: 'HMAC', hash: hashAlgorithm },
+                            hmacKey,
                             coseStructure.signature,
                             sigStructure
                         );
