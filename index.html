@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CWT.cam - CBOR Web Token Debugger</title>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-    <script src="https://unpkg.com/@anweiss/cddl@0.9.4/dist/cddl.js"></script>
     <style>
         * {
             margin: 0;
@@ -86,6 +85,8 @@
             width: 1.5rem;
             height: 1.5rem;
         }
+
+        .btn-xs { font-size: 0.6rem; padding: 0.1rem 0.3rem; }
 
         .standards {
             font-size: 0.7rem;
@@ -1074,7 +1075,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
                                 <td><input type="number" id="newClaimKey" placeholder="100" /></td>
                                 <td><input type="text" id="newClaimName" placeholder="custom_claim" /></td>
                                 <td><input type="text" id="newClaimDesc" placeholder="Description" /></td>
-                                <td><button class="btn" onclick="addClaimFromTable()" style="font-size: 0.6rem;">+</button></td>
+                                <td><button class="btn btn-xs" onclick="addClaimFromTable()">+</button></td>
                             </tr>
                         </tbody>
                     </table>
@@ -1143,25 +1144,35 @@ Load a token to see parsed claims • Click claim names to edit mappings
             40: { name: "htm", description: "HTTP Method - HTTP method of the request" }
         };
 
-        // COSE Algorithm identifiers
-        const COSE_ALGORITHMS = {
-            '-7': 'ES256 (ECDSA w/ SHA-256)',
-            '-35': 'ES384 (ECDSA w/ SHA-384)', 
-            '-36': 'ES512 (ECDSA w/ SHA-512)',
-            '4': 'HMAC 256/64',
-            '5': 'HMAC 256/256',
-            '6': 'HMAC 384/384',
-            '7': 'HMAC 512/512',
-            '10': 'AES-CCM-16-64-128',
-            '11': 'AES-CCM-16-64-256',
-            '12': 'AES-CCM-64-64-128',
-            '13': 'AES-CCM-64-64-256'
-        };
 
         let customClaims = {};
         let currentClaims = null;
         let verificationKey = null;
         let currentCOSEResult = null;
+
+        // Cache commonly used DOM elements
+        const domCache = {
+            tokenInput: null,
+            claimsDisplay: null,
+            claimCount: null,
+            registryCount: null,
+            signatureStatus: null,
+            verificationKeyInput: null,
+            
+            // Initialize cache after DOM loads
+            init() {
+                this.tokenInput = document.getElementById('tokenInput');
+                this.claimsDisplay = document.getElementById('claimsDisplay');
+                this.claimCount = document.getElementById('claimCount');
+                this.registryCount = document.getElementById('registryCount');
+                this.signatureStatus = document.getElementById('signatureStatus');
+                this.verificationKeyInput = document.getElementById('verificationKeyInput');
+            },
+            
+            get(id) {
+                return document.getElementById(id);
+            }
+        };
 
         // Enhanced CBOR decoder with COSE support and floating-point numbers
         class CBORDecoder {
@@ -1345,18 +1356,22 @@ Load a token to see parsed claims • Click claim names to edit mappings
             }
         }
 
+        // Utility function to set active states on button groups
+        function setActiveButton(buttonMappings, activeValue) {
+            Object.entries(buttonMappings).forEach(([value, buttonId]) => {
+                document.getElementById(buttonId).classList.toggle('active', value === activeValue);
+            });
+        }
+
         function setInputFormat(format) {
-            // Auto-detected format - update indicators only
-            document.getElementById('base64Btn').classList.toggle('active', format === 'base64');
-            document.getElementById('hexBtn').classList.toggle('active', format === 'hex');
+            setActiveButton({'base64': 'base64Btn', 'hex': 'hexBtn'}, format);
         }
 
         function setKeyFormat(format) {
-            // Auto-detected format - update indicators only
-            document.getElementById('keyPemBtn').classList.toggle('active', format === 'pem');
-            document.getElementById('keyJwkBtn').classList.toggle('active', format === 'jwk');
-            document.getElementById('keyHexBtn').classList.toggle('active', format === 'hex');
-            document.getElementById('keyBase64Btn').classList.toggle('active', format === 'base64');
+            setActiveButton({
+                'pem': 'keyPemBtn', 'jwk': 'keyJwkBtn', 
+                'hex': 'keyHexBtn', 'base64': 'keyBase64Btn'
+            }, format);
         }
 
         function setKeyType(type, algorithm = null) {
@@ -1394,56 +1409,28 @@ Load a token to see parsed claims • Click claim names to edit mappings
             }
         }
 
+        // Utility function to clear and set active states
+        function clearAndSetActive(buttonIds, activeId) {
+            buttonIds.forEach(id => document.getElementById(id).classList.remove('active'));
+            if (activeId) document.getElementById(activeId).classList.add('active');
+        }
+
         function setCoseType(type) {
-            // Clear all COSE type indicators
-            document.getElementById('coseSign1Btn').classList.remove('active');
-            document.getElementById('coseMac0Btn').classList.remove('active');
-            document.getElementById('coseSignBtn').classList.remove('active');
-            document.getElementById('coseMacBtn').classList.remove('active');
-            document.getElementById('coseEncrypt0Btn').classList.remove('active');
-            document.getElementById('coseEncryptBtn').classList.remove('active');
-            
-            // Set active based on type
-            if (type === 'COSE_Sign1') {
-                document.getElementById('coseSign1Btn').classList.add('active');
-            } else if (type === 'COSE_Mac0') {
-                document.getElementById('coseMac0Btn').classList.add('active');
-            } else if (type === 'COSE_Sign') {
-                document.getElementById('coseSignBtn').classList.add('active');
-            } else if (type === 'COSE_Mac') {
-                document.getElementById('coseMacBtn').classList.add('active');
-            } else if (type === 'COSE_Encrypt0') {
-                document.getElementById('coseEncrypt0Btn').classList.add('active');
-            } else if (type === 'COSE_Encrypt') {
-                document.getElementById('coseEncryptBtn').classList.add('active');
-            }
-            // If type is unknown/unrecognized, no button will be active
+            const buttonIds = ['coseSign1Btn', 'coseMac0Btn', 'coseSignBtn', 'coseMacBtn', 'coseEncrypt0Btn', 'coseEncryptBtn'];
+            const typeMap = {
+                'COSE_Sign1': 'coseSign1Btn', 'COSE_Mac0': 'coseMac0Btn', 'COSE_Sign': 'coseSignBtn',
+                'COSE_Mac': 'coseMacBtn', 'COSE_Encrypt0': 'coseEncrypt0Btn', 'COSE_Encrypt': 'coseEncryptBtn'
+            };
+            clearAndSetActive(buttonIds, typeMap[type]);
         }
 
         function setCoseAlgorithm(algorithm) {
-            // Clear all COSE algorithm indicators
-            document.getElementById('coseEcdsa256Btn').classList.remove('active');
-            document.getElementById('coseEcdsa384Btn').classList.remove('active');
-            document.getElementById('coseEcdsa512Btn').classList.remove('active');
-            document.getElementById('coseHmac256Btn').classList.remove('active');
-            document.getElementById('coseHmac384Btn').classList.remove('active');
-            document.getElementById('coseHmac512Btn').classList.remove('active');
-            
-            // Set active based on algorithm
-            if (algorithm === -7) {
-                document.getElementById('coseEcdsa256Btn').classList.add('active');
-            } else if (algorithm === -35) {
-                document.getElementById('coseEcdsa384Btn').classList.add('active');
-            } else if (algorithm === -36) {
-                document.getElementById('coseEcdsa512Btn').classList.add('active');
-            } else if (algorithm === 4 || algorithm === 5) {
-                document.getElementById('coseHmac256Btn').classList.add('active');
-            } else if (algorithm === 6) {
-                document.getElementById('coseHmac384Btn').classList.add('active');
-            } else if (algorithm === 7) {
-                document.getElementById('coseHmac512Btn').classList.add('active');
-            }
-            // Unknown algorithms simply don't highlight any button
+            const buttonIds = ['coseEcdsa256Btn', 'coseEcdsa384Btn', 'coseEcdsa512Btn', 'coseHmac256Btn', 'coseHmac384Btn', 'coseHmac512Btn'];
+            const algoMap = {
+                [-7]: 'coseEcdsa256Btn', [-35]: 'coseEcdsa384Btn', [-36]: 'coseEcdsa512Btn',
+                [4]: 'coseHmac256Btn', [5]: 'coseHmac256Btn', [6]: 'coseHmac384Btn', [7]: 'coseHmac512Btn'
+            };
+            clearAndSetActive(buttonIds, algoMap[algorithm]);
         }
 
         function generateCoseStructureHTML(coseResult, includeKeyId = true) {
@@ -1920,35 +1907,6 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 return encoder.getBuffer();
             }
 
-            rawToDER(rawSignature) {
-                // Convert raw R|S signature (64 bytes) to DER format
-                const r = rawSignature.slice(0, 32);
-                const s = rawSignature.slice(32, 64);
-                
-                // Remove leading zeros
-                let rTrimmed = r;
-                let sTrimmed = s;
-                while (rTrimmed[0] === 0 && rTrimmed.length > 1) rTrimmed = rTrimmed.slice(1);
-                while (sTrimmed[0] === 0 && sTrimmed.length > 1) sTrimmed = sTrimmed.slice(1);
-                
-                // Add padding byte if high bit is set
-                if (rTrimmed[0] & 0x80) rTrimmed = new Uint8Array([0, ...rTrimmed]);
-                if (sTrimmed[0] & 0x80) sTrimmed = new Uint8Array([0, ...sTrimmed]);
-                
-                // Build DER signature
-                const derSig = new Uint8Array([
-                    0x30, // SEQUENCE
-                    rTrimmed.length + sTrimmed.length + 4, // Total length
-                    0x02, // INTEGER
-                    rTrimmed.length,
-                    ...rTrimmed,
-                    0x02, // INTEGER  
-                    sTrimmed.length,
-                    ...sTrimmed
-                ]);
-                
-                return derSig;
-            }
 
             hexToBytes(hex) {
                 const bytes = new Uint8Array(hex.length / 2);
@@ -2141,7 +2099,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
             let formatted = "{\n";
             
             const entries = Object.entries(claims);
-            document.getElementById('claimCount').textContent = `${entries.length} claims`;
+            domCache.claimCount.textContent = `${entries.length} claims`;
             
             entries.forEach(([key, value], index) => {
                 const claimInfo = schema[key];
@@ -2173,8 +2131,8 @@ Load a token to see parsed claims • Click claim names to edit mappings
         }
 
         function updateDisplay() {
-            const token = document.getElementById('tokenInput').textContent.trim();
-            const claimsDisplay = document.getElementById('claimsDisplay');
+            const token = domCache.tokenInput.textContent.trim();
+            const claimsDisplay = domCache.claimsDisplay;
             
             if (!token) {
                 claimsDisplay.innerHTML = `{
@@ -2189,7 +2147,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
 Load a token to see parsed claims • Click claim names to edit mappings
 <a href="https://tools.ietf.org/rfc/rfc8392.txt#section-3.1" target="_blank" class="rfc-link">RFC 8392 §3.1</a>
 </div>`;
-                document.getElementById('claimCount').textContent = '0 claims';
+                domCache.claimCount.textContent = '0 claims';
                 currentClaims = null;
                 currentCOSEResult = null;
                 updateCOSEInfo(null);
@@ -2204,7 +2162,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
             
             if (!result.success) {
                 claimsDisplay.innerHTML = `<div class="error">Failed to parse CWT: ${result.error}</div>`;
-                document.getElementById('claimCount').textContent = '0 claims';
+                domCache.claimCount.textContent = '0 claims';
                 currentClaims = null;
                 return;
             }
@@ -2222,7 +2180,7 @@ Click claim names to edit mappings • <a href="https://tools.ietf.org/rfc/rfc83
         function updateClaimsList() {
             const schema = getActiveSchema();
             const claimList = document.getElementById('claimList');
-            const registryCount = document.getElementById('registryCount');
+            const registryCount = domCache.registryCount;
             
             claimList.innerHTML = '';
             const sortedKeys = Object.keys(schema).sort((a, b) => parseInt(a) - parseInt(b));
@@ -2245,8 +2203,8 @@ Click claim names to edit mappings • <a href="https://tools.ietf.org/rfc/rfc83
                         <span class="claim-source">${source}</span>
                     </div>
                     <div class="controls">
-                        <button class="btn" onclick="editClaim(${key})" style="font-size: 0.6rem; padding: 0.1rem 0.3rem;">Edit</button>
-                        ${source === 'custom' ? `<button class="btn" onclick="deleteClaim(${key})" style="font-size: 0.6rem; padding: 0.1rem 0.3rem;">Del</button>` : ''}
+                        <button class="btn btn-xs" onclick="editClaim(${key})">Edit</button>
+                        ${source === 'custom' ? `<button class="btn btn-xs" onclick="deleteClaim(${key})">Del</button>` : ''}
                     </div>
                 `;
                 
@@ -2280,7 +2238,7 @@ Click claim names to edit mappings • <a href="https://tools.ietf.org/rfc/rfc83
                     <td>${key}</td>
                     <td>${claim.name}</td>
                     <td>${claim.description}</td>
-                    <td>${source === 'custom' ? `<button class="btn" onclick="deleteClaim(${key})" style="font-size: 0.6rem;">×</button>` : ''}</td>
+                    <td>${source === 'custom' ? `<button class="btn btn-xs" onclick="deleteClaim(${key})">×</button>` : ''}</td>
                 `;
                 tbody.insertBefore(row, newRow);
             });
@@ -2535,9 +2493,9 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
                 if (!file) return;
                 
                 const reader = new FileReader();
-                reader.onload = async function(e) {
+                reader.onload = function(e) {
                     try {
-                        const parsedClaims = await parseCDDL(e.target.result);
+                        const parsedClaims = parseCDDL(e.target.result);
                         customClaims = parsedClaims;
                         updateClaimsList();
                         updateDisplay();
@@ -2551,35 +2509,10 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
             input.click();
         }
         
-        async function parseCDDL(cddlText) {
-            try {
-                // Initialize CDDL parser if not already done
-                if (typeof window.cddl === 'undefined') {
-                    await new Promise((resolve) => {
-                        const checkCddl = () => {
-                            if (typeof window.cddl !== 'undefined') {
-                                resolve();
-                            } else {
-                                setTimeout(checkCddl, 100);
-                            }
-                        };
-                        checkCddl();
-                    });
-                }
-                
-                // Parse CDDL with the WebAssembly parser
-                const cddlInstance = new window.cddl.CDDL(cddlText);
-                
-                // Since we can't directly extract claim definitions from the WASM parser,
-                // we'll fall back to our simple parser for now but validate the CDDL syntax
-                cddlInstance.validate(); // This will throw if the CDDL is invalid
-                
-                // Extract claims using our simple parser (but now we know the CDDL is valid)
-                return extractClaimsFromValidCDDL(cddlText);
-                
-            } catch (error) {
-                throw new Error(`Invalid CDDL syntax: ${error.message}`);
-            }
+        function parseCDDL(cddlText) {
+            // Extract claims using our simple parser
+            // Note: Basic validation only - does not validate full CDDL syntax
+            return extractClaimsFromValidCDDL(cddlText);
         }
         
         function extractClaimsFromValidCDDL(cddl) {
@@ -2791,25 +2724,6 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
             updateSignatureStatus();
         });
 
-        // Add RFC example buttons
-        function loadRFCExample() {
-            // RFC 8392 A.3 - Example Signed CWT 
-            const rfcToken = "d28443a10126a104524173796d6d657472696345434453413235365850a70175636f61703a2f2f61732e6578616d706c652e636f6d02656572696b77037818636f61703a2f2f6c696768742e6578616d706c652e636f6d041a5612aeb0051a5610d9f0061a5610d9f007420b7158405427c1ff28d23fbad1f29c4c7c6a555e601d6fa29f9179bc3d7438bacaca5acd08c8d4d4f96131680c429a01f85951ecee743a52b9b63632c57209120e1c9e30";
-            
-            // Convert hex to base64url
-            const buffer = new Uint8Array(rfcToken.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-            const base64 = btoa(String.fromCharCode(...buffer));
-            const base64url = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-            
-            document.getElementById('tokenInput').textContent = base64url;
-            document.getElementById('verificationKeyInput').textContent = '';
-            
-            updateDisplay();
-        }
-
-        // Add RFC button to controls (you can call this function from a button)
-        // <button class="btn" onclick="loadRFCExample()">RFC Example</button>
-
         // Help toggle function
         function toggleHelp() {
             const helpContent = document.getElementById('helpContent');
@@ -2844,7 +2758,8 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
             }
         });
 
-        // Initialize
+        // Initialize DOM cache and app
+        domCache.init();
         updateClaimsList();
         updateDisplay();
         
