@@ -78,6 +78,7 @@
             border-right: 1px solid #333;
             display: flex;
             flex-direction: column;
+            max-width: 850px;
         }
 
         .schema-panel {
@@ -399,6 +400,56 @@
             margin-top: 0.5rem;
         }
 
+        #signatureStatus {
+            min-height: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .auto-resize {
+            min-height: 80px;
+            max-height: 300px;
+            max-width: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            resize: none;
+        }
+
+        .auto-resize[contenteditable]:empty::before {
+            content: attr(data-placeholder);
+            color: #666;
+            font-style: italic;
+        }
+
+        .auto-resize[contenteditable]:focus::before {
+            display: none;
+        }
+
+        #tokenInput[contenteditable] {
+            height: 80px;
+            max-width: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            resize: none;
+        }
+
+        #tokenInput[contenteditable]:empty::before {
+            content: attr(data-placeholder);
+            color: #666;
+            font-style: italic;
+        }
+
+        #tokenInput[contenteditable]:focus::before {
+            display: none;
+        }
+
         .rfc-link {
             color: #4a9eff;
             text-decoration: none;
@@ -483,6 +534,15 @@
             color: #000;
             font-weight: bold;
         }
+
+        .format-indicator.disabled {
+            background: #1a1a1a;
+            border-color: #333;
+            color: #555;
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
 
         .cose-info {
             background: #1a1a1a;
@@ -608,7 +668,7 @@
                         <span class="format-indicator active" id="base64Btn">Base64URL</span>
                         <span class="format-indicator" id="hexBtn">Hex</span>
                     </div>
-                    <textarea id="tokenInput" class="token-input" placeholder="Paste CWT token in any format (Base64URL or Hex)..."></textarea>
+                    <div id="tokenInput" class="token-input" contenteditable="true" data-placeholder="Paste CWT token in any format (Base64URL or Hex)..."></div>
                 </div>
             </div>
 
@@ -620,12 +680,26 @@
                 <div class="section-content">
                     <div id="coseInfo" class="cose-info">
                         <div class="cose-field">
-                            <span class="cose-label">Type:</span> 
-                            <span class="cose-value" id="coseType">None detected</span>
+                            <span class="cose-label">Type:</span>
+                            <div class="input-format-toggle" style="margin-top: 0.25rem;">
+                                <span class="format-indicator" id="coseSign1Btn" title="Single signature - Supported">COSE_Sign1</span>
+                                <span class="format-indicator" id="coseMac0Btn" title="Single MAC - Supported">COSE_Mac0</span>
+                                <span class="format-indicator disabled" id="coseSignBtn" title="Multi-signature - Not yet implemented" aria-label="Not yet implemented">COSE_Sign</span>
+                                <span class="format-indicator disabled" id="coseMacBtn" title="Multi-MAC - Not yet implemented" aria-label="Not yet implemented">COSE_Mac</span>
+                                <span class="format-indicator disabled" id="coseEncrypt0Btn" title="Single encryption - Not yet implemented" aria-label="Not yet implemented">COSE_Encrypt0</span>
+                                <span class="format-indicator disabled" id="coseEncryptBtn" title="Multi-encryption - Not yet implemented" aria-label="Not yet implemented">COSE_Encrypt</span>
+                                <span class="format-indicator" id="coseUnknownTypeBtn">Unknown</span>
+                            </div>
                         </div>
                         <div class="cose-field">
-                            <span class="cose-label">Algorithm:</span> 
-                            <span class="cose-value" id="coseAlgorithm">Unknown</span>
+                            <div class="input-format-toggle" style="margin-top: 0.25rem;">
+                                <span class="format-indicator" id="coseEcdsa256Btn">ES256</span>
+                                <span class="format-indicator" id="coseEcdsa384Btn">ES384</span>
+                                <span class="format-indicator" id="coseEcdsa512Btn">ES512</span>
+                                <span class="format-indicator" id="coseHmac256Btn">HMAC-256</span>
+                                <span class="format-indicator" id="coseHmac384Btn">HMAC-384</span>
+                                <span class="format-indicator" id="coseHmac512Btn">HMAC-512</span>
+                            </div>
                         </div>
                         <div class="cose-field">
                             <span class="cose-label">Key ID:</span> 
@@ -649,12 +723,19 @@
                             <span class="format-indicator" id="keyHexBtn">Hex</span>
                             <span class="format-indicator" id="keyBase64Btn">Base64</span>
                         </div>
-                        <textarea id="verificationKeyInput" class="form-input" placeholder="Paste public key in any format (PEM, JWK, Hex, Base64)..." style="min-height: 80px; resize: vertical; font-size: 11px;"></textarea>
+                        <div class="input-format-toggle">
+                            <span class="format-indicator" id="keyEcdsa256Btn">ES256</span>
+                            <span class="format-indicator" id="keyEcdsa384Btn">ES384</span>
+                            <span class="format-indicator" id="keyEcdsa512Btn">ES512</span>
+                            <span class="format-indicator" id="keyHmac256Btn">HMAC-256</span>
+                            <span class="format-indicator" id="keyHmac384Btn">HMAC-384</span>
+                            <span class="format-indicator" id="keyHmac512Btn">HMAC-512</span>
+                        </div>
+                        <div id="verificationKeyInput" class="form-input auto-resize" contenteditable="true" data-placeholder="Paste public key in any format (PEM, JWK, Hex, Base64)..." style="font-size: 11px;"></div>
                     </div>
                     <div id="signatureStatus">
                         <div class="help-text">
                             Enter a verification key above to automatically verify the CWT signature.
-                            Supports: PEM/JWK (ECDSA), JWK/Hex/Base64 (HMAC), auto-detects format and algorithm.
                         </div>
                     </div>
                 </div>
@@ -1028,6 +1109,139 @@ Load a token to see parsed claims • Click claim names to edit mappings
             document.getElementById('keyBase64Btn').classList.toggle('active', format === 'base64');
         }
 
+        function setKeyType(type, algorithm = null) {
+            // Clear all key type indicators
+            document.getElementById('keyEcdsa256Btn').classList.remove('active');
+            document.getElementById('keyEcdsa384Btn').classList.remove('active');
+            document.getElementById('keyEcdsa512Btn').classList.remove('active');
+            document.getElementById('keyHmac256Btn').classList.remove('active');
+            document.getElementById('keyHmac384Btn').classList.remove('active');
+            document.getElementById('keyHmac512Btn').classList.remove('active');
+            
+            // Set active based on type and algorithm if available
+            if (type === 'ECDSA') {
+                if (algorithm === -7) {
+                    document.getElementById('keyEcdsa256Btn').classList.add('active');
+                } else if (algorithm === -35) {
+                    document.getElementById('keyEcdsa384Btn').classList.add('active');
+                } else if (algorithm === -36) {
+                    document.getElementById('keyEcdsa512Btn').classList.add('active');
+                } else {
+                    // Default to ES256 for ECDSA P-256 keys when algorithm unknown
+                    document.getElementById('keyEcdsa256Btn').classList.add('active');
+                }
+            } else if (type === 'HMAC') {
+                if (algorithm === 4 || algorithm === 5) {
+                    document.getElementById('keyHmac256Btn').classList.add('active');
+                } else if (algorithm === 6) {
+                    document.getElementById('keyHmac384Btn').classList.add('active');
+                } else if (algorithm === 7) {
+                    document.getElementById('keyHmac512Btn').classList.add('active');
+                } else {
+                    // Default to HMAC-256 when algorithm unknown
+                    document.getElementById('keyHmac256Btn').classList.add('active');
+                }
+            }
+        }
+
+        function setCoseType(type) {
+            // Clear all COSE type indicators
+            document.getElementById('coseSign1Btn').classList.remove('active');
+            document.getElementById('coseMac0Btn').classList.remove('active');
+            document.getElementById('coseSignBtn').classList.remove('active');
+            document.getElementById('coseMacBtn').classList.remove('active');
+            document.getElementById('coseEncrypt0Btn').classList.remove('active');
+            document.getElementById('coseEncryptBtn').classList.remove('active');
+            document.getElementById('coseUnknownTypeBtn').classList.remove('active');
+            
+            // Set active based on type
+            if (type === 'COSE_Sign1') {
+                document.getElementById('coseSign1Btn').classList.add('active');
+            } else if (type === 'COSE_Mac0') {
+                document.getElementById('coseMac0Btn').classList.add('active');
+            } else if (type === 'COSE_Sign') {
+                document.getElementById('coseSignBtn').classList.add('active');
+            } else if (type === 'COSE_Mac') {
+                document.getElementById('coseMacBtn').classList.add('active');
+            } else if (type === 'COSE_Encrypt0') {
+                document.getElementById('coseEncrypt0Btn').classList.add('active');
+            } else if (type === 'COSE_Encrypt') {
+                document.getElementById('coseEncryptBtn').classList.add('active');
+            } else {
+                document.getElementById('coseUnknownTypeBtn').classList.add('active');
+            }
+        }
+
+        function setCoseAlgorithm(algorithm) {
+            // Clear all COSE algorithm indicators
+            document.getElementById('coseEcdsa256Btn').classList.remove('active');
+            document.getElementById('coseEcdsa384Btn').classList.remove('active');
+            document.getElementById('coseEcdsa512Btn').classList.remove('active');
+            document.getElementById('coseHmac256Btn').classList.remove('active');
+            document.getElementById('coseHmac384Btn').classList.remove('active');
+            document.getElementById('coseHmac512Btn').classList.remove('active');
+            
+            // Set active based on algorithm
+            if (algorithm === -7) {
+                document.getElementById('coseEcdsa256Btn').classList.add('active');
+            } else if (algorithm === -35) {
+                document.getElementById('coseEcdsa384Btn').classList.add('active');
+            } else if (algorithm === -36) {
+                document.getElementById('coseEcdsa512Btn').classList.add('active');
+            } else if (algorithm === 4 || algorithm === 5) {
+                document.getElementById('coseHmac256Btn').classList.add('active');
+            } else if (algorithm === 6) {
+                document.getElementById('coseHmac384Btn').classList.add('active');
+            } else if (algorithm === 7) {
+                document.getElementById('coseHmac512Btn').classList.add('active');
+            }
+            // Unknown algorithms simply don't highlight any button
+        }
+
+        function generateCoseStructureHTML(coseResult, includeKeyId = true) {
+            const typeButtons = `
+                <div class="input-format-toggle" style="margin-top: 0.25rem;">
+                    <span class="format-indicator ${coseResult.type === 'COSE_Sign1' ? 'active' : ''}" id="tempCoseSign1">COSE_Sign1</span>
+                    <span class="format-indicator ${coseResult.type === 'COSE_Mac0' ? 'active' : ''}" id="tempCoseMac0">COSE_Mac0</span>
+                    <span class="format-indicator disabled" id="tempCoseSign">COSE_Sign</span>
+                    <span class="format-indicator disabled" id="tempCoseMac">COSE_Mac</span>
+                    <span class="format-indicator disabled" id="tempCoseEncrypt0">COSE_Encrypt0</span>
+                    <span class="format-indicator disabled" id="tempCoseEncrypt">COSE_Encrypt</span>
+                </div>
+            `;
+
+            const algorithmButtons = `
+                <div class="input-format-toggle" style="margin-top: 0.25rem;">
+                    <span class="format-indicator ${coseResult.algorithm === -7 ? 'active' : ''}" id="tempEcdsa256">ES256</span>
+                    <span class="format-indicator ${coseResult.algorithm === -35 ? 'active' : ''}" id="tempEcdsa384">ES384</span>
+                    <span class="format-indicator ${coseResult.algorithm === -36 ? 'active' : ''}" id="tempEcdsa512">ES512</span>
+                    <span class="format-indicator ${coseResult.algorithm === 4 || coseResult.algorithm === 5 ? 'active' : ''}" id="tempHmac256">HMAC-256</span>
+                    <span class="format-indicator ${coseResult.algorithm === 6 ? 'active' : ''}" id="tempHmac384">HMAC-384</span>
+                    <span class="format-indicator ${coseResult.algorithm === 7 ? 'active' : ''}" id="tempHmac512">HMAC-512</span>
+                </div>
+            `;
+
+            const keyIdInfo = includeKeyId ? `
+                <div class="cose-field">
+                    <span class="cose-label">Key ID:</span> 
+                    <span class="cose-value">${coseResult.keyId || 'Not specified'}</span>
+                </div>
+            ` : '';
+
+            return `
+                <div class="cose-info" style="margin-bottom: 0.5rem;">
+                    <div class="cose-field">
+                        <span class="cose-label">Type:</span>
+                        ${typeButtons}
+                    </div>
+                    <div class="cose-field">
+                        ${algorithmButtons}
+                    </div>
+                    ${keyIdInfo}
+                </div>
+            `;
+        }
+
         function base64UrlDecode(str) {
             str = str.replace(/-/g, '+').replace(/_/g, '/');
             while (str.length % 4) str += '=';
@@ -1244,27 +1458,43 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 // Auto-detect and update UI
                 if (keyMaterial.startsWith('-----BEGIN PUBLIC KEY-----')) {
                     setKeyFormat('pem');
-                    return this.importPEMKey(keyMaterial);
+                    const key = await this.importPEMKey(keyMaterial);
+                    setKeyType('ECDSA');
+                    return key;
                 } else if (keyMaterial.startsWith('{')) {
                     setKeyFormat('jwk');
-                    return this.parseJWK(keyMaterial);
+                    const key = await this.parseJWK(keyMaterial);
+                    return key; // parseJWK will set the key type
                 } else if (/^[0-9a-fA-F\s]+$/.test(keyMaterial.replace(/^0x/i, ''))) {
                     setKeyFormat('hex');
                     const keyBytes = this.hexToBytes(keyMaterial);
                     // Try both ECDSA and HMAC
                     try {
-                        return await this.importRawKey(keyBytes);
+                        const key = await this.importRawKey(keyBytes);
+                        setKeyType('ECDSA');
+                        return key;
                     } catch (error) {
-                        return await this.importHMACKey(keyBytes);
+                        const key = await this.importHMACKey(keyBytes);
+                        setKeyType('HMAC');
+                        return key;
                     }
                 } else {
-                    setKeyFormat('base64');
-                    const keyBytes = this.base64ToBytes(keyMaterial);
-                    // Try both ECDSA and HMAC
+                    // Try base64 first
                     try {
-                        return await this.importRawKey(keyBytes);
-                    } catch (error) {
-                        return await this.importHMACKey(keyBytes);
+                        setKeyFormat('base64');
+                        const keyBytes = this.base64ToBytes(keyMaterial);
+                        // Try both ECDSA and HMAC
+                        try {
+                            const key = await this.importRawKey(keyBytes);
+                            setKeyType('ECDSA');
+                            return key;
+                        } catch (error) {
+                            const key = await this.importHMACKey(keyBytes);
+                            setKeyType('HMAC');
+                            return key;
+                        }
+                    } catch (base64Error) {
+                        throw new Error('Invalid key format: not PEM, JWK, hex, or base64');
                     }
                 }
             }
@@ -1275,6 +1505,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
                     
                     if (jwk.kty === 'EC') {
                         // ECDSA key
+                        setKeyType('ECDSA');
                         const cleanJwk = {
                             kty: jwk.kty,
                             crv: jwk.crv,
@@ -1285,6 +1516,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
                         return await crypto.subtle.importKey('jwk', cleanJwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
                     } else if (jwk.kty === 'oct') {
                         // HMAC key (symmetric)
+                        setKeyType('HMAC');
                         const cleanJwk = {
                             kty: jwk.kty,
                             k: jwk.k
@@ -1572,16 +1804,14 @@ Load a token to see parsed claims • Click claim names to edit mappings
         }
 
         function updateCOSEInfo(coseResult) {
-            const typeElement = document.getElementById('coseType');
-            const algorithmElement = document.getElementById('coseAlgorithm');
             const keyIdElement = document.getElementById('coseKeyId');
             
             if (coseResult) {
-                typeElement.textContent = coseResult.type || 'Unknown';
+                // Update type indicators
+                setCoseType(coseResult.type);
                 
-                const algName = COSE_ALGORITHMS[coseResult.algorithm] || 
-                               (coseResult.algorithm ? `Algorithm ${coseResult.algorithm}` : 'Unknown');
-                algorithmElement.textContent = algName;
+                // Update algorithm indicators
+                setCoseAlgorithm(coseResult.algorithm);
                 
                 if (coseResult.keyId) {
                     if (typeof coseResult.keyId === 'string') {
@@ -1596,8 +1826,8 @@ Load a token to see parsed claims • Click claim names to edit mappings
                     keyIdElement.textContent = 'Not specified';
                 }
             } else {
-                typeElement.textContent = 'None detected';
-                algorithmElement.textContent = 'Unknown';
+                setCoseType(null); // This will activate the "Unknown" button
+                setCoseAlgorithm(null); // This will activate the "Unknown" button
                 keyIdElement.textContent = 'Not specified';
             }
         }
@@ -1695,7 +1925,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
         }
 
         function updateDisplay() {
-            const token = document.getElementById('tokenInput').value.trim();
+            const token = document.getElementById('tokenInput').textContent.trim();
             const claimsDisplay = document.getElementById('claimsDisplay');
             
             if (!token) {
@@ -1964,8 +2194,8 @@ Click claim names to edit mappings • <a href="https://tools.ietf.org/rfc/rfc83
         }
 
         function clearToken() {
-            document.getElementById('tokenInput').value = '';
-            document.getElementById('verificationKeyInput').value = '';
+            document.getElementById('tokenInput').textContent = '';
+            document.getElementById('verificationKeyInput').textContent = '';
             updateDisplay();
         }
 
@@ -1987,7 +2217,7 @@ Click claim names to edit mappings • <a href="https://tools.ietf.org/rfc/rfc83
             // 6: iat (issued at)
             // 7: h'0b71' (cti - CWT ID from RFC)
             const sampleToken = "2D3ShEOhASahBGh0ZXN0LWtleVgopAFrdGVzdC1pc3N1ZXICbHRlc3Qtc3ViamVjdAQaaKZ5rwYaaKZrn1hACQv8io4mljPpLcVFs_3vxrstvjQN5qtxsYe3L8-Nd1mai1nf3BfNgz_L-He0qVRjuqT4lmL1QQr4J7BmQWLT3w";
-            document.getElementById('tokenInput').value = sampleToken;
+            document.getElementById('tokenInput').textContent = sampleToken;
             
             // Auto-populate the matching verification key in the textarea
             const samplePublicKey = `-----BEGIN PUBLIC KEY-----
@@ -1995,7 +2225,7 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWd2Y4mYKmI+PiYPSS1/WZTXaevZ7
 IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
 -----END PUBLIC KEY-----`;
             
-            document.getElementById('verificationKeyInput').value = samplePublicKey;
+            document.getElementById('verificationKeyInput').textContent = samplePublicKey;
             
             updateDisplay();
         }
@@ -2223,7 +2453,7 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
         async function updateSignatureStatus() {
             const statusElement = document.getElementById('signatureStatus');
             const keyInput = document.getElementById('verificationKeyInput');
-            const keyValue = keyInput ? keyInput.value.trim() : '';
+            const keyValue = keyInput ? keyInput.textContent.trim() : '';
             
             if (!currentCOSEResult) {
                 statusElement.innerHTML = `
@@ -2243,9 +2473,8 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
             
             if (!keyValue) {
                 statusElement.innerHTML = `
+                    ${generateCoseStructureHTML(currentCOSEResult, false)}
                     <div class="help-text">
-                        COSE structure: ${currentCOSEResult.type}<br>
-                        Algorithm: ${COSE_ALGORITHMS[currentCOSEResult.algorithm] || currentCOSEResult.algorithm || 'Unknown'}<br>
                         Enter verification key above to validate signature
                     </div>
                 `;
@@ -2273,11 +2502,17 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
                 const isValid = await coseVerifier.verifySignature(currentCOSEResult, publicKey);
                 
                 if (isValid) {
+                    // Update key type indicator with algorithm information
+                    const algorithm = currentCOSEResult.algorithm;
+                    if (algorithm === -7 || algorithm === -35 || algorithm === -36) {
+                        setKeyType('ECDSA', algorithm);
+                    } else if ([4, 5, 6, 7].includes(algorithm)) {
+                        setKeyType('HMAC', algorithm);
+                    }
+                    
                     statusElement.innerHTML = `
                         <div class="success"><i data-lucide="check"></i> Signature verification PASSED</div>
                         <div class="help-text">
-                            COSE: ${currentCOSEResult.type}<br>
-                            Algorithm: ${COSE_ALGORITHMS[currentCOSEResult.algorithm] || 'Unknown'}<br>
                             ✅ The CWT signature is cryptographically valid and can be trusted
                         </div>
                     `;
@@ -2285,8 +2520,6 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
                     statusElement.innerHTML = `
                         <div class="error"><i data-lucide="x"></i> Signature verification FAILED</div>
                         <div class="help-text">
-                            COSE: ${currentCOSEResult.type}<br>
-                            Algorithm: ${COSE_ALGORITHMS[currentCOSEResult.algorithm] || 'Unknown'}<br>
                             ❌ The signature is cryptographically invalid - do not trust claims
                         </div>
                     `;
@@ -2323,8 +2556,8 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
             const base64 = btoa(String.fromCharCode(...buffer));
             const base64url = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
             
-            document.getElementById('tokenInput').value = base64url;
-            document.getElementById('verificationKeyInput').value = '';
+            document.getElementById('tokenInput').textContent = base64url;
+            document.getElementById('verificationKeyInput').textContent = '';
             
             updateDisplay();
         }
