@@ -467,6 +467,23 @@
             color: #000;
         }
 
+        .format-indicator {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.6rem;
+            background: #222;
+            border: 1px solid #444;
+            color: #888;
+            border-radius: 2px;
+            user-select: none;
+        }
+
+        .format-indicator.active {
+            background: #4a9eff;
+            border-color: #4a9eff;
+            color: #000;
+            font-weight: bold;
+        }
+
         .cose-info {
             background: #1a1a1a;
             border: 1px solid #333;
@@ -588,10 +605,10 @@
                 </div>
                 <div class="section-content">
                     <div class="input-format-toggle">
-                        <button class="format-btn active" id="base64Btn" onclick="setInputFormat('base64')">Base64URL</button>
-                        <button class="format-btn" id="hexBtn" onclick="setInputFormat('hex')">Hex</button>
+                        <span class="format-indicator active" id="base64Btn">Base64URL</span>
+                        <span class="format-indicator" id="hexBtn">Hex</span>
                     </div>
-                    <textarea id="tokenInput" class="token-input" placeholder="Paste base64url-encoded or hex CWT token here..."></textarea>
+                    <textarea id="tokenInput" class="token-input" placeholder="Paste CWT token in any format (Base64URL or Hex)..."></textarea>
                 </div>
             </div>
 
@@ -625,8 +642,14 @@
                 </div>
                 <div class="section-content">
                     <div class="form-group" style="margin-bottom: 0.5rem;">
-                        <label class="form-label">Verification Key (PEM, JWK, Hex, Base64)</label>
-                        <textarea id="verificationKeyInput" class="form-input" placeholder="Paste public key or HMAC secret here..." style="min-height: 80px; resize: vertical; font-size: 11px;"></textarea>
+                        <label class="form-label">Verification Key</label>
+                        <div class="input-format-toggle">
+                            <span class="format-indicator" id="keyPemBtn">PEM</span>
+                            <span class="format-indicator" id="keyJwkBtn">JWK</span>
+                            <span class="format-indicator" id="keyHexBtn">Hex</span>
+                            <span class="format-indicator" id="keyBase64Btn">Base64</span>
+                        </div>
+                        <textarea id="verificationKeyInput" class="form-input" placeholder="Paste public key in any format (PEM, JWK, Hex, Base64)..." style="min-height: 80px; resize: vertical; font-size: 11px;"></textarea>
                     </div>
                     <div id="signatureStatus">
                         <div class="help-text">
@@ -806,7 +829,6 @@ Load a token to see parsed claims • Click claim names to edit mappings
 
         let customClaims = {};
         let currentClaims = null;
-        let currentInputFormat = 'base64';
         let verificationKey = null;
         let currentCOSEResult = null;
 
@@ -993,18 +1015,17 @@ Load a token to see parsed claims • Click claim names to edit mappings
         }
 
         function setInputFormat(format) {
-            currentInputFormat = format;
+            // Auto-detected format - update indicators only
             document.getElementById('base64Btn').classList.toggle('active', format === 'base64');
             document.getElementById('hexBtn').classList.toggle('active', format === 'hex');
-            
-            const input = document.getElementById('tokenInput');
-            if (format === 'base64') {
-                input.placeholder = 'Paste base64url-encoded CWT token here...';
-            } else {
-                input.placeholder = 'Paste hex-encoded CWT token here (without 0x prefix)...';
-            }
-            
-            updateDisplay();
+        }
+
+        function setKeyFormat(format) {
+            // Auto-detected format - update indicators only
+            document.getElementById('keyPemBtn').classList.toggle('active', format === 'pem');
+            document.getElementById('keyJwkBtn').classList.toggle('active', format === 'jwk');
+            document.getElementById('keyHexBtn').classList.toggle('active', format === 'hex');
+            document.getElementById('keyBase64Btn').classList.toggle('active', format === 'base64');
         }
 
         function base64UrlDecode(str) {
@@ -1211,37 +1232,47 @@ Load a token to see parsed claims • Click claim names to edit mappings
             async parseKey(keyMaterial) {
                 keyMaterial = keyMaterial.trim();
                 
+                // Always auto-detect format
+                return this.parseKeyAuto(keyMaterial);
+            }
+
+            async parseKeyAuto(keyMaterial) {
+                // Auto-detect and update UI
                 if (keyMaterial.startsWith('-----BEGIN PUBLIC KEY-----')) {
-                    // PEM format
+                    setKeyFormat('pem');
                     return this.importPEMKey(keyMaterial);
                 } else if (keyMaterial.startsWith('{')) {
-                    // JWK format
-                    try {
-                        const jwk = JSON.parse(keyMaterial);
-                        
-                        // WebCrypto is strict about JWK format - only include fields it recognizes
-                        const cleanJwk = {
-                            kty: jwk.kty,
-                            crv: jwk.crv,
-                            x: jwk.x,
-                            y: jwk.y
-                        };
-                        
-                        return await crypto.subtle.importKey('jwk', cleanJwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
-                    } catch (error) {
-                        if (error.message.includes('Data provided to an operation does not meet requirements')) {
-                            throw new Error('Invalid EC key: The x,y coordinates do not form a valid point on the P-256 curve');
-                        }
-                        throw error;
-                    }
-                } else if (/^[0-9a-fA-F]+$/.test(keyMaterial)) {
-                    // Hex format - convert to raw
+                    setKeyFormat('jwk');
+                    return this.parseJWK(keyMaterial);
+                } else if (/^[0-9a-fA-F\s]+$/.test(keyMaterial.replace(/^0x/i, ''))) {
+                    setKeyFormat('hex');
                     const keyBytes = this.hexToBytes(keyMaterial);
                     return this.importRawKey(keyBytes);
                 } else {
-                    // Base64 format
+                    setKeyFormat('base64');
                     const keyBytes = this.base64ToBytes(keyMaterial);
                     return this.importRawKey(keyBytes);
+                }
+            }
+
+            async parseJWK(keyMaterial) {
+                try {
+                    const jwk = JSON.parse(keyMaterial);
+                    
+                    // WebCrypto is strict about JWK format - only include fields it recognizes
+                    const cleanJwk = {
+                        kty: jwk.kty,
+                        crv: jwk.crv,
+                        x: jwk.x,
+                        y: jwk.y
+                    };
+                    
+                    return await crypto.subtle.importKey('jwk', cleanJwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+                } catch (error) {
+                    if (error.message.includes('Data provided to an operation does not meet requirements')) {
+                        throw new Error('Invalid EC key: The x,y coordinates do not form a valid point on the P-256 curve');
+                    }
+                    throw error;
                 }
             }
 
@@ -1514,24 +1545,17 @@ Load a token to see parsed claims • Click claim names to edit mappings
             try {
                 let buffer;
                 
-                // Auto-detect format
+                // Always auto-detect format
                 const trimmedToken = token.trim();
-                let detectedFormat = currentInputFormat;
+                let detectedFormat;
                 
-                // Auto-detect hex format when in base64 mode
-                if (currentInputFormat === 'base64' && isHexString(trimmedToken)) {
+                if (isHexString(trimmedToken)) {
                     detectedFormat = 'hex';
                     setInputFormat('hex');
-                }
-                // Auto-detect base64 format when in hex mode
-                else if (currentInputFormat === 'hex' && isBase64String(trimmedToken)) {
-                    detectedFormat = 'base64';
-                    setInputFormat('base64');
-                }
-                
-                if (detectedFormat === 'hex') {
                     buffer = hexDecode(trimmedToken);
                 } else {
+                    detectedFormat = 'base64';
+                    setInputFormat('base64');
                     buffer = base64UrlDecode(trimmedToken);
                 }
                 
