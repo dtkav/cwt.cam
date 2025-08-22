@@ -34,6 +34,21 @@
             flex-direction: column;
         }
 
+        .mobile-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 999;
+        }
+
+        .mobile-overlay.active {
+            display: block;
+        }
+
         .header {
             background: #1a1a1a;
             border-bottom: 1px solid #333;
@@ -55,6 +70,21 @@
         .logo img {
             height: 140px;
             width: auto;
+        }
+
+        .mobile-menu-toggle {
+            display: none;
+            background: none;
+            border: none;
+            color: #4a9eff;
+            cursor: pointer;
+            padding: 0.5rem;
+            margin-left: auto;
+        }
+
+        .mobile-menu-toggle i {
+            width: 1.5rem;
+            height: 1.5rem;
         }
 
         .standards {
@@ -85,6 +115,10 @@
             background: #0f0f0f;
             display: flex;
             flex-direction: column;
+        }
+        
+        .schema-panel-header {
+            display: none;
         }
 
         .section {
@@ -593,15 +627,90 @@
         @media (max-width: 1024px) {
             .main {
                 grid-template-columns: 1fr;
-                grid-template-rows: 1fr auto;
-            }
-            
-            .schema-panel {
-                max-height: 40vh;
+                grid-template-rows: 1fr;
             }
             
             .container {
                 margin: 0 10px;
+            }
+            
+            .schema-panel {
+                position: fixed;
+                top: 0;
+                right: -100%;
+                width: 100%;
+                height: 100vh;
+                background: #0f0f0f;
+                z-index: 1000;
+                overflow-y: auto;
+            }
+            
+            .schema-panel.active {
+                right: 0;
+            }
+            
+            .schema-panel-header {
+                background: #1a1a1a;
+                border-bottom: 1px solid #333;
+                padding: 0.75rem 1rem;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                position: sticky;
+                top: 0;
+                z-index: 1001;
+            }
+            
+            .schema-panel-title {
+                font-size: 1.1rem;
+                font-weight: bold;
+                color: #4a9eff;
+            }
+            
+            .schema-close-btn {
+                background: none;
+                border: none;
+                color: #888;
+                cursor: pointer;
+                font-size: 1.5rem;
+                padding: 0.25rem;
+                line-height: 1;
+                width: 2rem;
+                height: 2rem;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .schema-close-btn {
+                display: none;
+            }
+            
+            .schema-close-btn:hover {
+                color: #fff;
+                background: #333;
+                border-radius: 3px;
+            }
+            
+            .mobile-menu-toggle {
+                display: block;
+            }
+            
+            .schema-close-btn {
+                display: flex;
+            }
+            
+            .schema-panel-header {
+                display: flex;
+            }
+            
+            .standards {
+                flex-wrap: wrap;
+                gap: 0.25rem;
+            }
+            
+            .standards a {
+                white-space: nowrap;
             }
         }
 
@@ -609,6 +718,135 @@
             .container {
                 margin: 0;
                 box-shadow: none;
+                width: 100%;
+                max-width: none;
+                overflow-x: hidden;
+            }
+            
+            .decoder-panel {
+                max-width: none;
+                width: 100%;
+                overflow-x: hidden;
+            }
+            
+            .section {
+                overflow-x: hidden;
+            }
+            
+            .section-header {
+                overflow-x: hidden;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+                min-width: 0;
+                flex-shrink: 1;
+            }
+            
+            .section-header span {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                min-width: 0;
+            }
+            
+            .section-content {
+                overflow-x: hidden;
+                padding: 0.5rem;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            .logo img {
+                height: 4em;
+            }
+            
+            .header {
+                flex-wrap: wrap;
+                gap: 0.5rem;
+                overflow-x: hidden;
+                padding: 0.5rem;
+            }
+            
+            .standards {
+                width: 100%;
+                order: 1;
+                justify-content: center;
+                text-align: center;
+                flex-wrap: wrap;
+                overflow-x: hidden;
+            }
+            
+            .schema-panel {
+                width: 100%;
+            }
+            
+            .token-input, 
+            .form-input,
+            .claims-display {
+                font-size: 12px;
+                overflow-x: auto;
+                word-break: break-all;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            .controls {
+                flex-wrap: wrap;
+                overflow-x: hidden;
+            }
+            
+            .input-format-toggle {
+                flex-wrap: wrap;
+                overflow-x: hidden;
+            }
+            
+            .cose-info {
+                overflow-x: hidden;
+                word-break: break-word;
+            }
+            
+            body {
+                overflow-x: hidden;
+            }
+            
+            * {
+                max-width: 100%;
+                box-sizing: border-box;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header {
+                padding: 0.5rem;
+            }
+            
+            .logo img {
+                height: 3em;
+            }
+            
+            .standards {
+                font-size: 0.6rem;
+            }
+            
+            .section-content {
+                padding: 0.4rem;
+            }
+            
+            .schema-panel {
+                width: 100%;
+            }
+            
+            .section-header {
+                font-size: 0.9rem;
+                padding: 0.4rem 0.5rem;
+            }
+            
+            .btn {
+                font-size: 0.65rem;
+                padding: 0.2rem 0.4rem;
+            }
+            
+            .format-indicator {
+                font-size: 0.55rem;
+                padding: 0.2rem 0.4rem;
             }
         }
 
@@ -619,6 +857,7 @@
             text-align: center;
             font-size: 0.75rem;
             color: #888;
+            margin-top: auto;
         }
 
         footer a {
@@ -639,16 +878,16 @@
     </style>
 </head>
 <body>
+    <div class="mobile-overlay" id="mobileOverlay" onclick="closeMobileMenu()"></div>
     <div class="container">
         <div class="header">
             <div class="logo">
                 <img src="static/logo.png" alt="CWT.cam Logo" />
             </div>
-            <div class="standards">
-                <a href="https://tools.ietf.org/rfc/rfc8392.txt" target="_blank">RFC 8392</a> |
-                <a href="https://www.iana.org/assignments/cwt" target="_blank">IANA CWT Claims</a> |
-                <a href="https://tools.ietf.org/rfc/rfc8152.txt" target="_blank">RFC 8152 (COSE)</a>
-            </div>
+            <div class="standards"></div>
+            <button class="mobile-menu-toggle" id="mobileMenuToggle" onclick="toggleMobileMenu()">
+                <i data-lucide="menu"></i>
+            </button>
         </div>
 
         <div class="main">
@@ -657,10 +896,18 @@
             <!-- Token Input -->
             <div class="section">
                 <div class="section-header">
-                    <span><i data-lucide="file-text"></i> CWT Token Input</span>
+                    <span>
+                        <i data-lucide="file-text"></i> CWT Token Input
+                        <i data-lucide="help-circle" style="width: 0.9rem; height: 0.9rem; margin-left: 0.5rem; color: #888; cursor: pointer;" onclick="toggleHelp()" title="What is a CWT?"></i>
+                    </span>
                     <div class="controls">
                         <button class="btn" onclick="clearToken()">Clear</button>
                         <button class="btn btn-primary" onclick="loadSample()">Sample</button>
+                    </div>
+                </div>
+                <div id="helpContent" style="display: none; background: #1a1a1a; border-bottom: 1px solid #333;">
+                    <div style="padding: 0.75rem; font-size: 0.75rem; line-height: 1.4; color: #ccc;">
+                        A CWT (CBOR Web Token, <a href="https://tools.ietf.org/rfc/rfc8392.txt" target="_blank" style="color: #4a9eff; text-decoration: underline;">RFC 8392</a>) is a CBOR (Concise Binary Object Representation, <a href="https://tools.ietf.org/rfc/rfc8949.txt" target="_blank" style="color: #4a9eff; text-decoration: underline;">RFC 8949</a>) object that contains claims and is cryptographically protected using COSE (CBOR Object Signing and Encryption, <a href="https://tools.ietf.org/rfc/rfc8152.txt" target="_blank" style="color: #4a9eff; text-decoration: underline;">RFC 8152</a>).<br>See all registered claim types at <a href="https://www.iana.org/assignments/cwt" target="_blank" style="color: #4a9eff; text-decoration: underline;">IANA CWT Claims</a>.
                     </div>
                 </div>
                 <div class="section-content">
@@ -688,7 +935,6 @@
                                 <span class="format-indicator disabled" id="coseMacBtn" title="Multi-MAC - Not yet implemented" aria-label="Not yet implemented">COSE_Mac</span>
                                 <span class="format-indicator disabled" id="coseEncrypt0Btn" title="Single encryption - Not yet implemented" aria-label="Not yet implemented">COSE_Encrypt0</span>
                                 <span class="format-indicator disabled" id="coseEncryptBtn" title="Multi-encryption - Not yet implemented" aria-label="Not yet implemented">COSE_Encrypt</span>
-                                <span class="format-indicator" id="coseUnknownTypeBtn">Unknown</span>
                             </div>
                         </div>
                         <div class="cose-field">
@@ -768,6 +1014,10 @@ Load a token to see parsed claims • Click claim names to edit mappings
 
         <!-- Schema Panel -->
         <div class="schema-panel">
+            <div class="schema-panel-header">
+                <div class="schema-panel-title">Schema & Claims</div>
+                <button class="schema-close-btn" onclick="closeMobileMenu()">×</button>
+            </div>
             <!-- Schema Controls -->
             <div class="section">
                 <div class="section-header">
@@ -1152,7 +1402,6 @@ Load a token to see parsed claims • Click claim names to edit mappings
             document.getElementById('coseMacBtn').classList.remove('active');
             document.getElementById('coseEncrypt0Btn').classList.remove('active');
             document.getElementById('coseEncryptBtn').classList.remove('active');
-            document.getElementById('coseUnknownTypeBtn').classList.remove('active');
             
             // Set active based on type
             if (type === 'COSE_Sign1') {
@@ -1167,9 +1416,8 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 document.getElementById('coseEncrypt0Btn').classList.add('active');
             } else if (type === 'COSE_Encrypt') {
                 document.getElementById('coseEncryptBtn').classList.add('active');
-            } else {
-                document.getElementById('coseUnknownTypeBtn').classList.add('active');
             }
+            // If type is unknown/unrecognized, no button will be active
         }
 
         function setCoseAlgorithm(algorithm) {
@@ -1826,8 +2074,8 @@ Load a token to see parsed claims • Click claim names to edit mappings
                     keyIdElement.textContent = 'Not specified';
                 }
             } else {
-                setCoseType(null); // This will activate the "Unknown" button
-                setCoseAlgorithm(null); // This will activate the "Unknown" button
+                setCoseType(null); // No button will be active for unknown types
+                setCoseAlgorithm(null); // No button will be active for unknown algorithms
                 keyIdElement.textContent = 'Not specified';
             }
         }
@@ -2512,9 +2760,6 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
                     
                     statusElement.innerHTML = `
                         <div class="success"><i data-lucide="check"></i> Signature verification PASSED</div>
-                        <div class="help-text">
-                            ✅ The CWT signature is cryptographically valid and can be trusted
-                        </div>
                     `;
                 } else {
                     statusElement.innerHTML = `
@@ -2564,6 +2809,40 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
 
         // Add RFC button to controls (you can call this function from a button)
         // <button class="btn" onclick="loadRFCExample()">RFC Example</button>
+
+        // Help toggle function
+        function toggleHelp() {
+            const helpContent = document.getElementById('helpContent');
+            if (helpContent.style.display === 'none') {
+                helpContent.style.display = 'block';
+            } else {
+                helpContent.style.display = 'none';
+            }
+        }
+
+        // Mobile menu functions
+        function toggleMobileMenu() {
+            const schemaPanel = document.querySelector('.schema-panel');
+            const overlay = document.getElementById('mobileOverlay');
+            
+            schemaPanel.classList.toggle('active');
+            overlay.classList.toggle('active');
+        }
+        
+        function closeMobileMenu() {
+            const schemaPanel = document.querySelector('.schema-panel');
+            const overlay = document.getElementById('mobileOverlay');
+            
+            schemaPanel.classList.remove('active');
+            overlay.classList.remove('active');
+        }
+        
+        // Close mobile menu on window resize if needed
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 1024) {
+                closeMobileMenu();
+            }
+        });
 
         // Initialize
         updateClaimsList();
