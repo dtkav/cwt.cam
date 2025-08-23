@@ -6,6 +6,7 @@
     <title>CWT.cam - CBOR Web Token Debugger</title>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <script src="cddl-utils.js"></script>
+    <script src="cbor-visualizer.js"></script>
     <style>
         * {
             margin: 0;
@@ -877,6 +878,136 @@
             vertical-align: text-bottom;
             margin-right: 4px;
         }
+
+        /* CBOR Visualizer Styles */
+        .structure-visualization {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .structure-panel {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            border-radius: 3px;
+            padding: 0.75rem;
+            min-height: 200px;
+        }
+
+        .cbor-bytes-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            font-family: inherit;
+            line-height: 1.8;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .cbor-structure-container {
+            font-family: inherit;
+            font-size: 12px;
+            line-height: 1.6;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .cbor-byte {
+            padding: 2px 4px;
+            background: #1a1a1a;
+            border-radius: 2px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 11px;
+            font-family: inherit;
+            display: inline-block;
+            border: 1px solid transparent;
+            color: #e0e0e0;
+        }
+
+        .cbor-byte:hover {
+            background: #333;
+            transform: scale(1.05);
+        }
+
+        .cbor-byte.cbor-highlighted {
+            background: #4a9eff;
+            border-color: #369fff;
+            color: #000;
+            font-weight: bold;
+        }
+
+        .cbor-byte-major { 
+            background: #1e3a8a !important; 
+            color: #93c5fd;
+        }
+        
+        .cbor-byte-length { 
+            background: #7c2d12 !important; 
+            color: #fcd34d;
+        }
+        
+        .cbor-byte-value { 
+            background: #14532d !important; 
+            color: #86efac;
+        }
+
+        .cbor-structure-item {
+            padding: 2px 4px;
+            border-radius: 2px;
+            margin: 1px 0;
+            cursor: pointer;
+            transition: background 0.2s;
+            position: relative;
+            font-size: 11px;
+            color: #ccc;
+        }
+
+        .cbor-structure-item:hover {
+            background: #1a1a1a;
+        }
+
+        .cbor-structure-item.cbor-highlighted {
+            background: #4a9eff;
+            color: #000;
+        }
+
+        .cbor-indent-0 { padding-left: 4px; }
+        .cbor-indent-1 { padding-left: 20px; }
+        .cbor-indent-2 { padding-left: 36px; }
+        .cbor-indent-3 { padding-left: 52px; }
+        .cbor-indent-4 { padding-left: 68px; }
+
+        .cbor-type-tag {
+            display: inline-block;
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-size: 9px;
+            margin-right: 4px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .cbor-type-major { 
+            background: #1e3a8a; 
+            color: #93c5fd; 
+        }
+
+        @media (max-width: 768px) {
+            .structure-visualization {
+                grid-template-columns: 1fr;
+            }
+            
+            .structure-panel {
+                min-height: 150px;
+            }
+            
+            .cbor-bytes-container,
+            .cbor-structure-container {
+                max-height: 200px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1009,6 +1140,28 @@
 Load a token to see parsed claims • Click claim names to edit mappings
 <a href="https://tools.ietf.org/rfc/rfc8392.txt#section-3.1" target="_blank" class="rfc-link">RFC 8392 §3.1</a>
 </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CBOR Structure Visualization -->
+            <div class="section">
+                <div class="section-header">
+                    <span><i data-lucide="eye"></i> CBOR Structure</span>
+                </div>
+                <div class="section-content" id="structureSection">
+                    <div class="structure-visualization">
+                        <div class="structure-panel">
+                            <h4 style="color: #ccc; margin-bottom: 0.5rem; font-size: 0.8rem;">Raw Bytes</h4>
+                            <div id="cborBytesDisplay" class="cbor-bytes-container"></div>
+                        </div>
+                        <div class="structure-panel">
+                            <h4 style="color: #ccc; margin-bottom: 0.5rem; font-size: 0.8rem;">CBOR Structure</h4>
+                            <div id="cborStructureDisplay" class="cbor-structure-container"></div>
+                        </div>
+                    </div>
+                    <div class="help-text" style="margin-top: 0.5rem;">
+                        Hover over bytes or structure elements to see relationships • Shows CBOR encoding details
                     </div>
                 </div>
             </div>
@@ -1150,6 +1303,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
         let currentClaims = null;
         let verificationKey = null;
         let currentCOSEResult = null;
+        let cborVisualizer = null;
 
         // Cache commonly used DOM elements
         const domCache = {
@@ -2153,6 +2307,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 currentCOSEResult = null;
                 updateCOSEInfo(null);
                 updateSignatureStatus();
+                updateCBORVisualization('');
                 return;
             }
             
@@ -2165,6 +2320,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 claimsDisplay.innerHTML = `<div class="error">Failed to parse CWT: ${result.error}</div>`;
                 domCache.claimCount.textContent = '0 claims';
                 currentClaims = null;
+                updateCBORVisualization(token); // Still show CBOR structure even if parsing failed
                 return;
             }
             
@@ -2176,6 +2332,9 @@ Load a token to see parsed claims • Click claim names to edit mappings
 <div class="help-text">
 Click claim names to edit mappings • <a href="https://tools.ietf.org/rfc/rfc8392.txt#section-3.1" target="_blank" class="rfc-link">RFC 8392 §3.1</a>
 </div>`;
+            
+            // Update CBOR visualization
+            updateCBORVisualization(token);
         }
 
         function updateClaimsList() {
@@ -2672,6 +2831,32 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
                 closeMobileMenu();
             }
         });
+
+        // CBOR Visualization functions
+        function updateCBORVisualization(token) {
+            if (!cborVisualizer) {
+                cborVisualizer = new CBORVisualizer();
+            }
+            
+            const bytesContainer = document.getElementById('cborBytesDisplay');
+            const structureContainer = document.getElementById('cborStructureDisplay');
+            
+            if (!token) {
+                bytesContainer.innerHTML = '<div style="color: #888; text-align: center; padding: 2rem;">No token loaded</div>';
+                structureContainer.innerHTML = '<div style="color: #888; text-align: center; padding: 2rem;">No structure to display</div>';
+                return;
+            }
+            
+            const result = cborVisualizer.visualize(token, {
+                bytesContainer: bytesContainer,
+                structureContainer: structureContainer,
+                onError: (error) => {
+                    bytesContainer.innerHTML = `<div style="color: #ff6b6b; padding: 1rem;">${error}</div>`;
+                    structureContainer.innerHTML = `<div style="color: #ff6b6b; padding: 1rem;">Could not parse CBOR structure</div>`;
+                }
+            });
+        }
+        
 
         // Initialize DOM cache and app
         domCache.init();
