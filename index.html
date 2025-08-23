@@ -892,7 +892,6 @@
             border: 1px solid #333;
             border-radius: 3px;
             padding: 0.75rem;
-            min-height: 200px;
         }
 
         .cbor-bytes-container {
@@ -901,16 +900,12 @@
             gap: 2px;
             font-family: inherit;
             line-height: 1.8;
-            max-height: 300px;
-            overflow-y: auto;
         }
 
         .cbor-structure-container {
             font-family: inherit;
             font-size: 12px;
             line-height: 1.6;
-            max-height: 300px;
-            overflow-y: auto;
         }
 
         .cbor-byte {
@@ -997,15 +992,6 @@
         @media (max-width: 768px) {
             .structure-visualization {
                 grid-template-columns: 1fr;
-            }
-            
-            .structure-panel {
-                min-height: 150px;
-            }
-            
-            .cbor-bytes-container,
-            .cbor-structure-container {
-                max-height: 200px;
             }
         }
     </style>
@@ -1121,7 +1107,7 @@
             </div>
 
             <!-- CWT Claims -->
-            <div class="section" style="flex: 1;">
+            <div class="section">
                 <div class="section-header">
                     <span><i data-lucide="clipboard-list"></i> CWT Claims Set</span>
                     <span id="claimCount" style="font-size: 0.7rem; color: #888;">0 claims</span>
