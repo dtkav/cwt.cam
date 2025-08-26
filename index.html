@@ -909,8 +909,7 @@
         }
 
         .cbor-bytes-container {
-            display: flex;
-            flex-wrap: wrap;
+            display: block;
             gap: 2px;
             font-family: inherit;
             line-height: 1.8;
@@ -933,11 +932,11 @@
             display: inline-block;
             border: 1px solid transparent;
             color: #e0e0e0;
+            margin: 1px;
         }
 
         .cbor-byte:hover {
             background: #333;
-            transform: scale(1.05);
         }
 
         .cbor-byte.cbor-highlighted {
@@ -3272,6 +3271,12 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
                         Click claim names to edit mappings • <a href="https://tools.ietf.org/rfc/rfc8392.txt#section-3.1" target="_blank" class="rfc-link">RFC 8392 §3.1</a>
                         </div>`;
                         
+                        // Update CBOR visualization with decrypted payload
+                        const tokenInput = document.getElementById('tokenInput');
+                        if (tokenInput?.textContent.trim()) {
+                            updateCBORVisualization(tokenInput.textContent.trim(), decryptedPayload);
+                        }
+                        
                         // Update key type indicator
                         const algorithm = currentCOSEResult.algorithm;
                         if (algorithm === 1 || algorithm === 10) {
@@ -3373,7 +3378,7 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
         });
 
         // CBOR Visualization functions
-        function updateCBORVisualization(token) {
+        function updateCBORVisualization(token, decryptedPayload = null) {
             if (!cborVisualizer) {
                 cborVisualizer = new CBORVisualizer();
             }
@@ -3387,14 +3392,26 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
                 return;
             }
             
-            const result = cborVisualizer.visualize(token, {
+            // Pass additional context for COSE_Encrypt0 tokens with decrypted payloads
+            const options = {
                 bytesContainer: bytesContainer,
                 structureContainer: structureContainer,
                 onError: (error) => {
                     bytesContainer.innerHTML = `<div style="color: #ff6b6b; padding: 1rem;">${error}</div>`;
                     structureContainer.innerHTML = `<div style="color: #ff6b6b; padding: 1rem;">Could not parse CBOR structure</div>`;
                 }
-            });
+            };
+            
+            // Add decrypted payload context if available
+            if (currentCOSEResult?.type === 'COSE_Encrypt0' && decryptedPayload) {
+                options.decryptedPayloads = [{
+                    originalBytes: currentCOSEResult.payload,
+                    decryptedBytes: new Uint8Array(decryptedPayload),
+                    context: 'cose-encrypt0-payload'
+                }];
+            }
+            
+            const result = cborVisualizer.visualize(token, options);
         }
         
 
