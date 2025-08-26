@@ -1332,6 +1332,30 @@ class CBORVisualizationDecoder {
                     }
                 }
                 
+                // Check for COSE key type
+                if (context === 'cose-key-type') {
+                    const keyTypeName = this.getCOSEKeyType(value);
+                    if (keyTypeName && keyTypeName !== `Key Type ${value}`) {
+                        structure.description = `Key Type: ${keyTypeName} (${value})`;
+                    }
+                }
+                
+                // Check for COSE curve
+                if (context === 'cose-curve') {
+                    const curveName = this.getCOSECurve(value);
+                    if (curveName && curveName !== `Curve ${value}`) {
+                        structure.description = `Curve: ${curveName} (${value})`;
+                    }
+                }
+                
+                // Check for COSE key operations  
+                if (context === 'cose-key-ops') {
+                    const keyOpName = this.getCOSEKeyOps(value);
+                    if (keyOpName && keyOpName !== `Key Operation ${value}`) {
+                        structure.description = `Key Operation: ${keyOpName} (${value})`;
+                    }
+                }
+                
                 structure.endOffset = this.offset - 1;
                 break;
 
@@ -1352,6 +1376,30 @@ class CBORVisualizationDecoder {
                     const algorithmName = this.getCOSEAlgorithmName(negValue);
                     if (algorithmName && algorithmName !== `Algorithm ${negValue}`) {
                         structure.description = `Algorithm: ${algorithmName} (${negValue})`;
+                    }
+                }
+                
+                // Check for COSE key type (can be negative)
+                if (context === 'cose-key-type') {
+                    const keyTypeName = this.getCOSEKeyType(negValue);
+                    if (keyTypeName && keyTypeName !== `Key Type ${negValue}`) {
+                        structure.description = `Key Type: ${keyTypeName} (${negValue})`;
+                    }
+                }
+                
+                // Check for COSE curve (can be negative)
+                if (context === 'cose-curve') {
+                    const curveName = this.getCOSECurve(negValue);
+                    if (curveName && curveName !== `Curve ${negValue}`) {
+                        structure.description = `Curve: ${curveName} (${negValue})`;
+                    }
+                }
+                
+                // Check for COSE key operations (can be negative)
+                if (context === 'cose-key-ops') {
+                    const keyOpName = this.getCOSEKeyOps(negValue);
+                    if (keyOpName && keyOpName !== `Key Operation ${negValue}`) {
+                        structure.description = `Key Operation: ${keyOpName} (${negValue})`;
                     }
                 }
                 
@@ -1505,6 +1553,8 @@ class CBORVisualizationDecoder {
                 // Check if this is a COSE structure
                 if (context === 'cose') {
                     structure.description = `COSE Structure Array (${value} items)`;
+                } else if (context === 'cose-key-ops') {
+                    structure.description = `Key Operations Array (${value} items)`;
                 }
                 
                 this.structures.push(structure);
@@ -1528,6 +1578,10 @@ class CBORVisualizationDecoder {
                             itemDesc = `[3] Signature:`;
                             itemContext = 'cose-signature';
                         }
+                    } else if (context === 'cose-key-ops') {
+                        // For key operations array, each item should be decoded as a key operation
+                        itemDesc = `Operation ${i + 1}:`;
+                        itemContext = 'cose-key-ops';
                     }
                     
                     this.structures.push({
@@ -1587,8 +1641,18 @@ class CBORVisualizationDecoder {
                     
                     // Determine value context based on key
                     let valueContext = null;
-                    if (context === 'cose-header' && keyValue === 1) {
-                        valueContext = 'cose-header-value'; // Algorithm parameter
+                    if (context === 'cose-header') {
+                        if (keyValue === 1 || keyValue === -7 || keyValue === -35 || keyValue === -36) {
+                            valueContext = 'cose-header-value'; // Algorithm parameter
+                        } else if (keyValue === -1) {
+                            valueContext = 'cose-key-type'; // Key Type parameter
+                        } else if (keyValue === -2) {
+                            valueContext = 'cose-curve'; // Curve parameter  
+                        } else if (keyValue === -4) {
+                            valueContext = 'cose-key-ops'; // Key Operations parameter
+                        } else {
+                            valueContext = 'cose-header-value'; // General COSE value
+                        }
                     }
                     
                     this.structures.push({
@@ -1687,15 +1751,39 @@ class CBORVisualizationDecoder {
     
     getCOSEHeaderParam(key) {
         const params = {
+            // Common COSE Header Parameters (RFC 8152)
             1: 'alg (Algorithm)',
-            2: 'crit (Critical)',
+            2: 'crit (Critical)', 
             3: 'content type',
             4: 'kid (Key ID)',
             5: 'IV',
             6: 'Partial IV',
-            7: 'counter signature'
+            7: 'counter signature',
+            8: 'Counter Signature0',
+            // COSE Key Common Parameters (RFC 8152 Section 7)
+            '-1': 'kty (Key Type)',
+            '-2': 'kid (Key ID)', 
+            '-3': 'alg (Key Algorithm)',
+            '-4': 'key_ops (Key Operations)',
+            '-5': 'Base IV',
+            // EC2 Key Parameters (RFC 8152 Section 13.1.1)
+            '-2': 'crv (Curve)',
+            '-3': 'x (X Coordinate)',
+            '-4': 'y (Y Coordinate)', 
+            '-5': 'd (Private Key)',
+            // Symmetric Key Parameters (RFC 8152 Section 13.2)
+            '-1': 'k (Key Value)',
+            // RSA Key Parameters (RFC 8017)
+            '-37': 'n (Modulus)',
+            '-38': 'e (Exponent)', 
+            '-39': 'd (Private Exponent)',
+            '-40': 'p (First Prime)',
+            '-41': 'q (Second Prime)',
+            '-42': 'dP (First Factor CRT Exponent)',
+            '-43': 'dQ (Second Factor CRT Exponent)',
+            '-44': 'qInv (First CRT Coefficient)'
         };
-        return params[Math.abs(key)] || null;
+        return params[String(key)] || null;
     }
     
     getCOSEAlgorithmName(algId) {
@@ -1703,14 +1791,70 @@ class CBORVisualizationDecoder {
             '-7': 'ES256 (ECDSA w/ SHA-256)',
             '-35': 'ES384 (ECDSA w/ SHA-384)', 
             '-36': 'ES512 (ECDSA w/ SHA-512)',
+            '-8': 'EdDSA',
+            '-257': 'RS256 (RSASSA-PKCS1-v1_5 w/ SHA-256)',
+            '-258': 'RS384 (RSASSA-PKCS1-v1_5 w/ SHA-384)',
+            '-259': 'RS512 (RSASSA-PKCS1-v1_5 w/ SHA-512)',
+            '-37': 'PS256 (RSASSA-PSS w/ SHA-256)',
+            '-38': 'PS384 (RSASSA-PSS w/ SHA-384)',
+            '-39': 'PS512 (RSASSA-PSS w/ SHA-512)',
             '1': 'AES-GCM-128',
+            '2': 'AES-GCM-192',
+            '3': 'AES-GCM-256',
             '4': 'HMAC 256/64',
             '5': 'HMAC 256/256',
             '6': 'HMAC 384/384',
             '7': 'HMAC 512/512',
-            '10': 'AES-CCM-16-64-128'
+            '10': 'AES-CCM-16-64-128',
+            '11': 'AES-CCM-16-64-256',
+            '12': 'AES-CCM-64-64-128',
+            '13': 'AES-CCM-64-64-256',
+            '30': 'AES-CCM-16-128-128',
+            '31': 'AES-CCM-16-128-256',
+            '32': 'AES-CCM-64-128-128',
+            '33': 'AES-CCM-64-128-256',
+            '24': 'ChaCha20-Poly1305'
         };
         return algorithms[String(algId)] || `Algorithm ${algId}`;
+    }
+    
+    getCOSEKeyType(kty) {
+        const keyTypes = {
+            '1': 'OKP (Octet Key Pair)',
+            '2': 'EC2 (Elliptic Curve Keys w/ x- and y-coordinate pair)',
+            '3': 'RSA',
+            '4': 'Symmetric'
+        };
+        return keyTypes[String(kty)] || `Key Type ${kty}`;
+    }
+    
+    getCOSECurve(crv) {
+        const curves = {
+            '1': 'P-256',
+            '2': 'P-384', 
+            '3': 'P-521',
+            '4': 'X25519',
+            '5': 'X448',
+            '6': 'Ed25519',
+            '7': 'Ed448'
+        };
+        return curves[String(crv)] || `Curve ${crv}`;
+    }
+    
+    getCOSEKeyOps(keyOp) {
+        const operations = {
+            '1': 'sign',
+            '2': 'verify',
+            '3': 'encrypt',
+            '4': 'decrypt',
+            '5': 'wrap key',
+            '6': 'unwrap key',
+            '7': 'derive key',
+            '8': 'derive bits',
+            '9': 'MAC create',
+            '10': 'MAC verify'
+        };
+        return operations[String(keyOp)] || `Key Operation ${keyOp}`;
     }
     
     decodeEmbeddedCBOR(embeddedBytes, indent, context, baseOffset) {
