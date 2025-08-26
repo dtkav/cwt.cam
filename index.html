@@ -251,6 +251,33 @@
             background: #369fff;
         }
 
+        .sample-dropdown {
+            background: #333;
+            border: 1px solid #555;
+            color: #e0e0e0;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.7rem;
+            border-radius: 3px;
+            cursor: pointer;
+            width: 13em;
+            font-family: inherit;
+        }
+
+        .sample-dropdown:hover {
+            border-color: #4a9eff;
+        }
+
+        .sample-dropdown:focus {
+            outline: none;
+            border-color: #4a9eff;
+            box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+        }
+
+        .sample-dropdown option {
+            background: #333;
+            color: #e0e0e0;
+        }
+
         .claim-list {
             overflow-y: auto;
         }
@@ -1034,7 +1061,14 @@
                     </span>
                     <div class="controls">
                         <button class="btn" onclick="clearToken()">Clear</button>
-                        <button class="btn btn-primary" onclick="loadSample()">Sample</button>
+                        <select class="sample-dropdown" onchange="loadSample(this.value)">
+                            <option value="">Load Sample...</option>
+                            <option value="signed">✅ Signed CWT (RFC_8392 A.3)</option>
+                            <option value="maced">✅ MACed CWT (RFC_8392 A.4)</option>
+                            <option value="encrypted">✅ COSE_Encrypt0 + AES-GCM-128 (Web Crypto)</option>
+                            <option value="floating">✅ Floating-Point CWT (RFC_8392 A.7)</option>
+                            <option value="gcm-example">✅ AES-GCM Example Token</option>
+                        </select>
                     </div>
                 </div>
                 <div id="helpContent" style="display: none; background: #1a1a1a; border-bottom: 1px solid #333;">
@@ -2960,34 +2994,78 @@ Click claim names to edit mappings • <a href="https://tools.ietf.org/rfc/rfc83
             updateDisplay();
         }
 
-        function loadSample() {
+        function loadSample(sampleType = 'custom') {
+            // Reset dropdown selection
+            if (sampleType) {
+                const dropdown = document.querySelector('.sample-dropdown');
+                dropdown.value = '';
+            }
             
-            // Real COSE_Sign1 wrapped CWT token with cryptographic signature
-            // Generated using our cwt-verify.js script with ES256 algorithm
-            // Structure: CWT tag (61) wrapping COSE_Sign1 structure
-            // - Protected: {1: -7} (ES256 algorithm)  
-            // - Unprotected: {4: "test-key"} (key ID)
-            // - Payload: RFC 8392 compliant CWT claims
-            // - Signature: Real 64-byte ECDSA signature
-            // 
-            // Claims include (RFC 8392 compatible):
-            // 1: "coap://as.example.com" (iss)
-            // 2: "erikw" (sub)
-            // 3: "coap://light.example.com" (aud) 
-            // 4: exp (expiration time)
-            // 5: nbf (not before)
-            // 6: iat (issued at)
-            // 7: h'0b71' (cti - CWT ID from RFC)
-            const sampleToken = "2D3ShEOhASahBGh0ZXN0LWtleVgopAFrdGVzdC1pc3N1ZXICbHRlc3Qtc3ViamVjdAQaaKZ5rwYaaKZrn1hACQv8io4mljPpLcVFs_3vxrstvjQN5qtxsYe3L8-Nd1mai1nf3BfNgz_L-He0qVRjuqT4lmL1QQr4J7BmQWLT3w";
-            document.getElementById('tokenInput').textContent = sampleToken;
+            let sampleToken = '';
+            let sampleKey = '';
+            let description = '';
             
-            // Auto-populate the matching verification key in the textarea
-            const samplePublicKey = `-----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWd2Y4mYKmI+PiYPSS1/WZTXaevZ7
-IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
+            switch(sampleType) {
+                case 'signed':
+                    // RFC 8392 A.3 - Signed CWT (COSE_Sign1 + ES256)
+                    description = 'Signed CWT (RFC_8392 A.3) - COSE_Sign1 with ES256';
+                    sampleToken = '0oRDoQEmoQRSQXN5bW1ldHJpY0VDRFNBMjU2WFCnAXVjb2FwOi8vYXMuZXhhbXBsZS5jb20CZWVyaWt3A3gYY29hcDovL2xpZ2h0LmV4YW1wbGUuY29tBBpWEq6wBRpWENnwBhpWENnwB0ILcVhAVCfB_yjSP7rR8pxMfGpVXmAdb6KfkXm8PXQ4usrKWs0IyNTU-WExaAxCmgH4WVHs7nQ6Urm2NjLFcgkSDhyeMA';
+                    // RFC A.2.3 ECDSA P-256 public key
+                    sampleKey = `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEFDMpzOeGjkFpJ1mc9lo0884v/aVa
+fspp7YkZo5TULw9g9/GngNing7+3ot1rJ5boEo27zvnT0WjblSmXGjbnuQ==
 -----END PUBLIC KEY-----`;
+                    break;
+                    
+                case 'maced':
+                    // RFC 8392 A.4 - MACed CWT (COSE_Mac0 + HMAC-256/64)
+                    description = 'MACed CWT (RFC_8392 A.4) - COSE_Mac0 with HMAC-256/64';
+                    sampleToken = '2D3RhEOhAQShBExTeW1tZXRyaWMyNTZYUKcBdWNvYXA6Ly9hcy5leGFtcGxlLmNvbQJlZXJpa3cDeBhjb2FwOi8vbGlnaHQuZXhhbXBsZS5jb20EGlYSrrAFGlYQ2fAGGlYQ2fAHQgtxSAkxAe9teJIA';
+                    // 256-bit symmetric key from RFC A.2.2
+                    sampleKey = '403697de87af64611c1d32a05dab0fe1fcb715a86ab435f1ec99192d79569388';
+                    break;
+                    
+                case 'encrypted':
+                    // Working COSE_Encrypt0 with AES-GCM-128 (Web Crypto compatible)
+                    description = 'COSE_Encrypt0 with AES-GCM-128 encryption (Web Crypto compatible)';
+                    sampleToken = '0INEoWExAaJhNExTeW1tZXRyaWMxMjhhNUyZoNeEbnYsSf_opj5YZzFoWVOMp9oAjGQVcvI6XedBBK2IpyFzISB1IK1w5vHahZf-XUo_Yp4GE79hxiN4GSKbTV0cLXjyqnCrhB0rt-5dzdhiiHmsefDIVN-zfdzWsmK0mID6kvcqtIon_XSQIjlgqNcn-xw';
+                    // 128-bit symmetric key (same as RFC A.2.1 for compatibility)
+                    sampleKey = '231f4c4d4d3051fdc2ec0a3851d5b383';
+                    break;
+                    
+                case 'gcm-example':
+                    // Additional AES-GCM example showing pure COSE_Encrypt0 structure
+                    description = 'Pure COSE_Encrypt0 example with AES-GCM-128 and typical CWT claims';
+                    sampleToken = '0INEoWExAaJhNExTeW1tZXRyaWMxMjhhNUyZoNeEbnYsSf_opj5YZzFoWVOMp9oAjGQVcvI6XedBBK2IpyFzISB1IK1w5vHahZf-XUo_Yp4GE79hxiN4GSKbTV0cLXjyqnCrhB0rt-5dzdhiiHmsefDIVN-zfdzWsmK0mID6kvcqtIon_XSQIjlgqNcn-xw';
+                    sampleKey = '231f4c4d4d3051fdc2ec0a3851d5b383';
+                    break;
+                    
+                case 'floating':
+                    // RFC 8392 A.7 - MACed CWT with Floating-Point Value
+                    description = 'Floating-Point CWT (RFC_8392 A.7) - MACed CWT with floating-point timestamp';
+                    sampleToken = '0YRDoQEEoQRMU3ltbWV0cmljMjU2S6EG-0HVhDZ8IAAASLiBbzTAVCiS';
+                    // 256-bit symmetric key from RFC A.2.2
+                    sampleKey = '403697de87af64611c1d32a05dab0fe1fcb715a86ab435f1ec99192d79569388';
+                    break;
+                    
+                default:
+                    // Default to signed example if unknown type
+                    description = 'Signed CWT (RFC_8392 A.3) - COSE_Sign1 with ES256';
+                    sampleToken = '0oRDoQEmoQRSQXN5bW1ldHJpY0VDRFNBMjU2WFCnAXVjb2FwOi8vYXMuZXhhbXBsZS5jb20CZWVyaWt3A3gYY29hcDovL2xpZ2h0LmV4YW1wbGUuY29tBBpWEq6wBRpWENnwBhpWENnwB0ILcVhAVCfB_yjSP7rR8pxMfGpVXmAdb6KfkXm8PXQ4usrKWs0IyNTU-WExaAxCmgH4WVHs7nQ6Urm2NjLFcgkSDhyeMA';
+                    // RFC A.2.3 ECDSA P-256 public key
+                    sampleKey = `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEFDMpzOeGjkFpJ1mc9lo0884v/aVa
+fspp7YkZo5TULw9g9/GngNing7+3ot1rJ5boEo27zvnT0WjblSmXGjbnuQ==
+-----END PUBLIC KEY-----`;
+                    break;
+            }
             
-            document.getElementById('verificationKeyInput').textContent = samplePublicKey;
+            // Load the sample
+            document.getElementById('tokenInput').textContent = sampleToken;
+            document.getElementById('verificationKeyInput').textContent = sampleKey;
+            
+            // Add description as a comment in the UI if we want
+            console.log(`Loaded sample: ${description}`);
             
             updateDisplay();
             updateSignatureStatus();
