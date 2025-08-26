@@ -1618,17 +1618,31 @@ Load a token to see parsed claims • Click claim names to edit mappings
             `;
         }
 
-        function base64UrlDecode(str) {
-            str = str.replace(/-/g, '+').replace(/_/g, '/');
-            while (str.length % 4) str += '=';
+        function base64UrlDecode(base64url) {
+            // Remove all whitespace
+            base64url = base64url.replace(/\s/g, '');
+            console.log('Decoding base64url length:', base64url.length);
             
-            const binary = atob(str);
+            // Convert base64url to base64
+            let base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+            
+            // Add padding if necessary
+            while (base64.length % 4) {
+                base64 += '=';
+            }
+            
+            // Use the browser's built-in atob() function
+            const binary = atob(base64);
             const bytes = new Uint8Array(binary.length);
             for (let i = 0; i < binary.length; i++) {
                 bytes[i] = binary.charCodeAt(i);
             }
+            
+            console.log('Decoded to', bytes.length, 'bytes');
+            console.log('First 10 bytes:', Array.from(bytes.slice(0, 10)).map(b => b.toString(16).padStart(2, '0')).join(''));
             return bytes.buffer;
         }
+        
 
         function hexDecode(str) {
             str = str.replace(/\s/g, '').replace(/^0x/i, '');
