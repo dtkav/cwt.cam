@@ -378,6 +378,19 @@
             gap: 0.4rem;
         }
 
+        .info {
+            color: #4a9eff;
+            background: rgba(74, 158, 255, 0.1);
+            border: 1px solid rgba(74, 158, 255, 0.3);
+            padding: 0.5rem;
+            border-radius: 3px;
+            font-size: 1rem;
+            margin: 0.5rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
         .warning {
             color: #ffd43b;
             background: rgba(255, 212, 59, 0.1);
@@ -400,7 +413,8 @@
         /* Status message icons */
         .success i[data-lucide],
         .error i[data-lucide],
-        .warning i[data-lucide] {
+        .warning i[data-lucide],
+        .info i[data-lucide] {
             width: 1rem;
             height: 1rem;
             stroke-width: 2.5;
@@ -1052,7 +1066,7 @@
                                 <span class="format-indicator" id="coseMac0Btn" title="Single MAC - Supported">COSE_Mac0</span>
                                 <span class="format-indicator disabled" id="coseSignBtn" title="Multi-signature - Not yet implemented" aria-label="Not yet implemented">COSE_Sign</span>
                                 <span class="format-indicator disabled" id="coseMacBtn" title="Multi-MAC - Not yet implemented" aria-label="Not yet implemented">COSE_Mac</span>
-                                <span class="format-indicator disabled" id="coseEncrypt0Btn" title="Single encryption - Not yet implemented" aria-label="Not yet implemented">COSE_Encrypt0</span>
+                                <span class="format-indicator" id="coseEncrypt0Btn" title="Single encryption with AES-CCM" aria-label="COSE_Encrypt0 encryption">COSE_Encrypt0</span>
                                 <span class="format-indicator disabled" id="coseEncryptBtn" title="Multi-encryption - Not yet implemented" aria-label="Not yet implemented">COSE_Encrypt</span>
                             </div>
                         </div>
@@ -1064,6 +1078,8 @@
                                 <span class="format-indicator" id="coseHmac256Btn">HMAC-256</span>
                                 <span class="format-indicator" id="coseHmac384Btn">HMAC-384</span>
                                 <span class="format-indicator" id="coseHmac512Btn">HMAC-512</span>
+                                <span class="format-indicator" id="coseAesGcm128Btn">AES-GCM-128</span>
+                                <span class="format-indicator disabled" id="coseAesCcm128Btn" title="AES-CCM not supported by Web Crypto API">AES-CCM-128</span>
                             </div>
                         </div>
                         <div class="cose-field">
@@ -1566,10 +1582,11 @@ Load a token to see parsed claims • Click claim names to edit mappings
         }
 
         function setCoseAlgorithm(algorithm) {
-            const buttonIds = ['coseEcdsa256Btn', 'coseEcdsa384Btn', 'coseEcdsa512Btn', 'coseHmac256Btn', 'coseHmac384Btn', 'coseHmac512Btn'];
+            const buttonIds = ['coseEcdsa256Btn', 'coseEcdsa384Btn', 'coseEcdsa512Btn', 'coseHmac256Btn', 'coseHmac384Btn', 'coseHmac512Btn', 'coseAesGcm128Btn', 'coseAesCcm128Btn'];
             const algoMap = {
                 [-7]: 'coseEcdsa256Btn', [-35]: 'coseEcdsa384Btn', [-36]: 'coseEcdsa512Btn',
-                [4]: 'coseHmac256Btn', [5]: 'coseHmac256Btn', [6]: 'coseHmac384Btn', [7]: 'coseHmac512Btn'
+                [4]: 'coseHmac256Btn', [5]: 'coseHmac256Btn', [6]: 'coseHmac384Btn', [7]: 'coseHmac512Btn',
+                [1]: 'coseAesGcm128Btn', [10]: 'coseAesCcm128Btn'
             };
             clearAndSetActive(buttonIds, algoMap[algorithm]);
         }
@@ -1830,10 +1847,12 @@ Load a token to see parsed claims • Click claim names to edit mappings
             constructor() {
                 this.supportedAlgorithms = {
                     '-7': 'ES256',  // ECDSA with SHA-256
+                    '1': 'AES-GCM-128',      // AES-GCM with 128-bit key, 128-bit tag
                     '4': 'HMAC256/64',   // HMAC 256/64
                     '5': 'HMAC256/256',  // HMAC 256/256
                     '6': 'HMAC384/384',  // HMAC 384/384
-                    '7': 'HMAC512/512'   // HMAC 512/512
+                    '7': 'HMAC512/512',   // HMAC 512/512
+                    '10': 'AES-CCM-16-64-128'  // AES-CCM with 128-bit key, 64-bit tag, 13-byte nonce
                 };
             }
 
@@ -1858,30 +1877,66 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 } else if (/^[0-9a-fA-F\s]+$/.test(keyMaterial.replace(/^0x/i, ''))) {
                     setKeyFormat('hex');
                     const keyBytes = this.hexToBytes(keyMaterial);
-                    // Try both ECDSA and HMAC
-                    try {
-                        const key = await this.importRawKey(keyBytes);
-                        setKeyType('ECDSA');
-                        return key;
-                    } catch (error) {
-                        const key = await this.importHMACKey(keyBytes);
-                        setKeyType('HMAC');
-                        return key;
+                    
+                    // For COSE_Encrypt0, try AES first
+                    const isEncryption = currentCOSEResult && currentCOSEResult.type === 'COSE_Encrypt0';
+                    console.log('Key parsing: isEncryption =', isEncryption, 'keyBytes.length =', keyBytes.length);
+                    console.log('currentCOSEResult type:', currentCOSEResult?.type);
+                    
+                    if ((isEncryption || (currentCOSEResult?.algorithm === 10) || (currentCOSEResult?.algorithm === 1)) && keyBytes.length === 16) {
+                        // 16-byte key for COSE_Encrypt0 or algorithms 1/10 - try AES first
+                        try {
+                            console.log('Trying to import as AES key...');
+                            const key = await this.importAESKey(keyBytes, currentCOSEResult?.algorithm);
+                            console.log('AES key import successful!', key.algorithm);
+                            setKeyType('AES');
+                            return key;
+                        } catch (aesError) {
+                            console.log('AES key import failed:', aesError);
+                            // Fall back to HMAC if AES fails
+                            console.log('Falling back to HMAC...');
+                            const key = await this.importHMACKey(keyBytes);
+                            setKeyType('HMAC');
+                            return key;
+                        }
+                    } else {
+                        // Normal order: ECDSA, HMAC, then AES
+                        try {
+                            const key = await this.importRawKey(keyBytes);
+                            setKeyType('ECDSA');
+                            return key;
+                        } catch (error) {
+                            try {
+                                const key = await this.importHMACKey(keyBytes);
+                                setKeyType('HMAC');
+                                return key;
+                            } catch (hmacError) {
+                                const key = await this.importAESKey(keyBytes, currentCOSEResult?.algorithm);
+                                setKeyType('AES');
+                                return key;
+                            }
+                        }
                     }
                 } else {
                     // Try base64 first
                     try {
                         setKeyFormat('base64');
                         const keyBytes = this.base64ToBytes(keyMaterial);
-                        // Try both ECDSA and HMAC
+                        // Try ECDSA, HMAC, and AES in order
                         try {
                             const key = await this.importRawKey(keyBytes);
                             setKeyType('ECDSA');
                             return key;
                         } catch (error) {
-                            const key = await this.importHMACKey(keyBytes);
-                            setKeyType('HMAC');
-                            return key;
+                            try {
+                                const key = await this.importHMACKey(keyBytes);
+                                setKeyType('HMAC');
+                                return key;
+                            } catch (hmacError) {
+                                const key = await this.importAESKey(keyBytes, currentCOSEResult?.algorithm);
+                                setKeyType('AES');
+                                return key;
+                            }
                         }
                     } catch (base64Error) {
                         throw new Error('Invalid key format: not PEM, JWK, hex, or base64');
@@ -1905,15 +1960,22 @@ Load a token to see parsed claims • Click claim names to edit mappings
                         
                         return await crypto.subtle.importKey('jwk', cleanJwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
                     } else if (jwk.kty === 'oct') {
-                        // HMAC key (symmetric)
-                        setKeyType('HMAC');
+                        // Symmetric key - could be HMAC or AES
                         const cleanJwk = {
                             kty: jwk.kty,
                             k: jwk.k
                         };
                         
-                        // Default to SHA-256, will be corrected during verification if needed
-                        return await crypto.subtle.importKey('jwk', cleanJwk, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+                        // Check algorithm or use hint to determine key type
+                        if (jwk.alg && (jwk.alg.includes('GCM') || jwk.alg.includes('CCM'))) {
+                            // AES encryption key
+                            setKeyType('AES');
+                            return await crypto.subtle.importKey('jwk', cleanJwk, { name: 'AES-CCM' }, false, ['decrypt']);
+                        } else {
+                            // Default to HMAC - will be corrected during verification if needed
+                            setKeyType('HMAC');
+                            return await crypto.subtle.importKey('jwk', cleanJwk, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+                        }
                     } else {
                         throw new Error(`Unsupported JWK key type: ${jwk.kty}`);
                     }
@@ -1974,6 +2036,246 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 );
             }
 
+            async importAESKey(keyBytes, algorithm) {
+                // AES keys must be exactly 16, 24, or 32 bytes (128, 192, or 256 bits)
+                if (![16, 24, 32].includes(keyBytes.length)) {
+                    throw new Error(`Invalid AES key length: ${keyBytes.length * 8} bits. Must be 128, 192, or 256 bits.`);
+                }
+                
+                // Determine the AES mode based on algorithm or default to GCM (more broadly supported)
+                let aesAlgorithm;
+                if (algorithm === 1) {
+                    aesAlgorithm = 'AES-GCM';  // Algorithm 1 = AES-GCM-128
+                } else if (algorithm === 10) {
+                    aesAlgorithm = 'AES-CCM';  // Algorithm 10 = AES-CCM-16-64-128
+                } else {
+                    aesAlgorithm = 'AES-GCM';  // Default to GCM for broader compatibility
+                }
+                
+                // Import AES key for the specified algorithm
+                return crypto.subtle.importKey(
+                    'raw',
+                    keyBytes,
+                    { name: aesAlgorithm },
+                    false,
+                    ['decrypt']
+                );
+            }
+
+            // Simple CBOR encoding for Enc_structure
+            encodeEncStructure(encStructure) {
+                // This is a simplified CBOR encoder for the specific case of Enc_structure
+                // ["Encrypt0", protected_headers, external_aad]
+                
+                const textEncoder = new TextEncoder();
+                const encrypt0Bytes = textEncoder.encode("Encrypt0");
+                const protectedHeaders = encStructure[1];
+                const externalAad = encStructure[2];
+                
+                // Calculate proper CBOR encoding lengths
+                let phLength = protectedHeaders.length;
+                let phLengthBytes = 0;
+                let phLengthHeader = 0x40; // base for major type 2 (byte string)
+                
+                if (phLength <= 23) {
+                    phLengthHeader = 0x40 + phLength;
+                    phLengthBytes = 1;
+                } else if (phLength <= 255) {
+                    phLengthHeader = 0x58; // major type 2, additional info 24
+                    phLengthBytes = 2; // 1 for header, 1 for length
+                } else {
+                    throw new Error('Protected headers too long for this simple CBOR encoder');
+                }
+                
+                const result = new Uint8Array(
+                    1 + // array header
+                    1 + encrypt0Bytes.length + // text string
+                    phLengthBytes + protectedHeaders.length + // protected headers byte string  
+                    1 // external AAD byte string (empty)
+                );
+                
+                let offset = 0;
+                
+                // CBOR array with 3 elements
+                result[offset++] = 0x83;
+                
+                // CBOR text string "Encrypt0" (8 characters)
+                result[offset++] = 0x68;
+                result.set(encrypt0Bytes, offset);
+                offset += encrypt0Bytes.length;
+                
+                // CBOR byte string for protected headers
+                if (phLength <= 23) {
+                    result[offset++] = phLengthHeader;
+                } else {
+                    result[offset++] = phLengthHeader;
+                    result[offset++] = phLength;
+                }
+                result.set(protectedHeaders, offset);
+                offset += protectedHeaders.length;
+                
+                // CBOR byte string for external AAD (empty)
+                result[offset++] = 0x40;
+                
+                console.log('Encoded Enc_structure length:', result.length, 'bytes');
+                console.log('Enc_structure hex:', Array.from(result).map(b => b.toString(16).padStart(2, '0')).join(''));
+                
+                return result;
+            }
+
+            async decryptPayload(coseStructure, aesKey) {
+                try {
+                    const algorithm = coseStructure.algorithm;
+                    
+                    if (algorithm === 1) { // AES-GCM-128
+                        // Extract IV from protected or unprotected headers (parameter 5)
+                        let iv = coseStructure.iv;
+                        if (!iv) {
+                            throw new Error('No IV found in COSE headers for AES-GCM decryption');
+                        }
+                        
+                        // Convert IV to Uint8Array if needed
+                        if (Array.isArray(iv)) {
+                            iv = new Uint8Array(iv);
+                        }
+                        
+                        console.log('Attempting AES-GCM decryption with:');
+                        console.log('IV length:', iv.length, 'bytes');
+                        console.log('IV:', Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join(''));
+                        console.log('Key algorithm:', aesKey.algorithm);
+                        
+                        const encryptedPayload = new Uint8Array(coseStructure.payload);
+                        console.log('Encrypted payload length:', encryptedPayload.length, 'bytes');
+                        
+                        // For AES-GCM, the last 16 bytes are the authentication tag
+                        const tagLength = 16; // 128-bit tag for AES-GCM
+                        const ciphertext = encryptedPayload.slice(0, -tagLength);
+                        const authTag = encryptedPayload.slice(-tagLength);
+                        
+                        console.log('Ciphertext length:', ciphertext.length, 'bytes');
+                        console.log('Auth tag length:', authTag.length, 'bytes');
+                        
+                        // Build Additional Authenticated Data (AAD) - COSE Enc_structure
+                        // Enc_structure = ["Encrypt0", protected_headers, external_aad]
+                        // Use the raw protected headers bytes, not the decoded object
+                        const protectedHeadersBytes = coseStructure.protectedBytes || new Uint8Array();
+                        
+                        // CBOR encode the Enc_structure array
+                        const encStructure = [
+                            "Encrypt0",
+                            protectedHeadersBytes,
+                            new Uint8Array(0)  // external_aad is empty
+                        ];
+                        
+                        // Manual CBOR encoding for the Enc_structure
+                        // This is simplified - in production, use a proper CBOR library
+                        console.log('Protected headers bytes for AAD:', protectedHeadersBytes);
+                        console.log('Protected headers bytes length:', protectedHeadersBytes.length);
+                        const aadArray = this.encodeEncStructure(encStructure);
+                        
+                        console.log('AAD length:', aadArray.length, 'bytes');
+                        
+                        // Reconstruct the full ciphertext with tag for Web Crypto API
+                        const fullCiphertext = new Uint8Array(ciphertext.length + authTag.length);
+                        fullCiphertext.set(ciphertext);
+                        fullCiphertext.set(authTag, ciphertext.length);
+                        
+                        // Decrypt with AES-GCM
+                        const decryptedData = await crypto.subtle.decrypt(
+                            {
+                                name: 'AES-GCM',
+                                iv: iv,
+                                additionalData: aadArray,
+                                tagLength: 128 // 128-bit tag
+                            },
+                            aesKey,
+                            fullCiphertext
+                        );
+                        
+                        console.log('AES-GCM decryption successful!');
+                        console.log('Decrypted data length:', decryptedData.byteLength, 'bytes');
+                        
+                        return decryptedData;
+                        
+                    } else if (algorithm === 10) { // AES-CCM-16-64-128
+                        // Extract IV from protected or unprotected headers (parameter 5)
+                        let iv = coseStructure.iv;
+                        if (!iv) {
+                            throw new Error('No IV found in COSE headers for AES-CCM decryption');
+                        }
+                        
+                        // Convert IV to Uint8Array if needed
+                        if (Array.isArray(iv)) {
+                            iv = new Uint8Array(iv);
+                        }
+                        
+                        // Create encryption context for AES-CCM
+                        // AES-CCM-16-64-128 uses: 16-byte key, 64-bit (8-byte) tag, and variable nonce length
+                        const encryptedPayload = new Uint8Array(coseStructure.payload);
+                        
+                        // For AES-CCM-16-64-128:
+                        // - 16 = key size in bytes (128 bits)  
+                        // - 64 = tag size in bits (8 bytes)
+                        // - 128 = nonce size in bits - this seems to be a mistake in the name, 
+                        //   RFC suggests 13-byte nonce for AES-CCM-16-64-128
+                        
+                        console.log('Attempting AES-CCM decryption with:');
+                        console.log('IV length:', iv.length, 'bytes');
+                        console.log('IV:', Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join(''));
+                        console.log('Payload length:', encryptedPayload.length, 'bytes');
+                        console.log('Key algorithm:', aesKey.algorithm);
+                        
+                        // Check browser compatibility
+                        console.log('Browser info:', navigator.userAgent);
+                        
+                        // If the key was imported as HMAC, we need to re-import it as AES
+                        let actualAESKey = aesKey;
+                        if (aesKey.algorithm.name !== 'AES-CCM') {
+                            console.log('Key was imported as', aesKey.algorithm.name, ', re-importing as AES-CCM');
+                            try {
+                                // Extract the raw key bytes from the HMAC key
+                                const keyBytes = await crypto.subtle.exportKey('raw', aesKey);
+                                console.log('Exported key bytes length:', keyBytes.byteLength);
+                                actualAESKey = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-CCM' }, false, ['decrypt']);
+                                console.log('Re-imported key algorithm:', actualAESKey.algorithm);
+                            } catch (reImportError) {
+                                console.log('Re-import failed:', reImportError);
+                                throw new Error(`❌ AES-CCM is not supported by Web Crypto API
+
+The Web Crypto API only supports:
+• AES-CBC (Cipher Block Chaining)
+• AES-CTR (Counter Mode) 
+• AES-GCM (Galois/Counter Mode)
+
+COSE_Encrypt0 with algorithm 10 (AES-CCM-16-64-128) cannot be decrypted in browsers.
+
+For AES-CCM support, use:
+• Node.js server-side decryption
+• JavaScript crypto libraries (forge.js, etc.)
+• COSE tokens with AES-GCM instead of AES-CCM`);
+                            }
+                        }
+                        
+                        const decryptedBytes = await crypto.subtle.decrypt(
+                            {
+                                name: 'AES-CCM',
+                                iv: iv,
+                                tagLength: 64 // 64-bit tag = 8 bytes
+                            },
+                            actualAESKey,
+                            encryptedPayload
+                        );
+                        
+                        return new Uint8Array(decryptedBytes);
+                    }
+                    
+                    throw new Error(`Unsupported encryption algorithm: ${algorithm}`);
+                } catch (error) {
+                    console.error('Decryption error:', error);
+                    throw error;
+                }
+            }
+
             async verifySignature(coseStructure, publicKey) {
                 try {
                     const sigStructure = this.createSigStructure(coseStructure);
@@ -1993,15 +2295,20 @@ Load a token to see parsed claims • Click claim names to edit mappings
                     // HMAC algorithms
                     if ([4, 5, 6, 7].includes(algorithm)) {
                         let hashAlgorithm;
+                        let truncateLength = null;
+                        
                         switch (algorithm) {
-                            case 4: // HMAC 256/64
-                            case 5: // HMAC 256/256
+                            case 4: // HMAC 256/64 (HMAC-SHA-256 truncated to 64 bits = 8 bytes)
+                                hashAlgorithm = 'SHA-256';
+                                truncateLength = 8;
+                                break;
+                            case 5: // HMAC 256/256 (full HMAC-SHA-256)
                                 hashAlgorithm = 'SHA-256';
                                 break;
-                            case 6: // HMAC 384/384
+                            case 6: // HMAC 384/384 (full HMAC-SHA-384)
                                 hashAlgorithm = 'SHA-384';
                                 break;
-                            case 7: // HMAC 512/512
+                            case 7: // HMAC 512/512 (full HMAC-SHA-512)
                                 hashAlgorithm = 'SHA-512';
                                 break;
                         }
@@ -2014,13 +2321,32 @@ Load a token to see parsed claims • Click claim names to edit mappings
                             hmacKey = await this.importHMACKey(new Uint8Array(keyData), hashAlgorithm);
                         }
                         
-                        const result = await crypto.subtle.verify(
+                        // Compute full HMAC
+                        const fullHmacResult = await crypto.subtle.sign(
                             { name: 'HMAC', hash: hashAlgorithm },
                             hmacKey,
-                            coseStructure.signature,
                             sigStructure
                         );
-                        return result;
+                        
+                        // Truncate if needed
+                        let expectedTag = new Uint8Array(fullHmacResult);
+                        if (truncateLength) {
+                            expectedTag = expectedTag.slice(0, truncateLength);
+                        }
+                        
+                        // Compare with provided MAC tag
+                        const providedTag = new Uint8Array(coseStructure.signature);
+                        
+                        if (expectedTag.length !== providedTag.length) {
+                            return false;
+                        }
+                        
+                        // Constant-time comparison
+                        let result = 0;
+                        for (let i = 0; i < expectedTag.length; i++) {
+                            result |= expectedTag[i] ^ providedTag[i];
+                        }
+                        return result === 0;
                     }
                     
                     throw new Error(`Unsupported algorithm: ${algorithm}`);
@@ -2032,21 +2358,18 @@ Load a token to see parsed claims • Click claim names to edit mappings
             }
 
             createSigStructure(coseStructure) {
-                // Create proper CBOR-encoded Sig_structure for COSE_Sign1
-                // Sig_structure = [
-                //     context = "Signature1",
-                //     body_protected = protected headers as bytes,
-                //     external_aad = empty,
-                //     payload = payload as bytes
-                // ]
+                // Create proper CBOR-encoded structure for COSE_Sign1 or COSE_Mac0
+                // For COSE_Sign1: Sig_structure = [context="Signature1", body_protected, external_aad, payload]
+                // For COSE_Mac0: MAC_structure = [context="MAC0", body_protected, external_aad, payload]
                 
                 const encoder = new CBOREncoder();
                 
                 // Array with 4 elements
                 encoder.encodeArray(4);
                 
-                // Context: "Signature1"
-                encoder.encodeText("Signature1");
+                // Context depends on COSE type
+                const context = coseStructure.type === 'COSE_Mac0' ? 'MAC0' : 'Signature1';
+                encoder.encodeText(context);
                 
                 // Protected headers as byte string
                 const protectedBytes = coseStructure.protectedBytes || new Uint8Array(0);
@@ -2110,28 +2433,59 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 } else if (coseSource && coseSource.tag === 17) {
                     coseType = 'COSE_Mac0';
                     coseData = coseSource.value;
+                } else if (coseSource && coseSource.tag === 16) {
+                    coseType = 'COSE_Encrypt0';
+                    coseData = coseSource.value;
                 }
                 
-                // COSE_Sign1 structure: [protected headers, unprotected headers, payload, signature]
-                if (Array.isArray(coseData) && coseData.length === 4) {
+                // COSE_Sign1 and COSE_Mac0 structure: [protected headers, unprotected headers, payload, signature/tag]
+                // COSE_Encrypt0 structure: [protected headers, unprotected headers, encrypted_payload]
+                console.log('COSE data array:', coseData);
+                console.log('COSE data length:', coseData?.length);
+                if (coseData && Array.isArray(coseData)) {
+                    coseData.forEach((item, i) => {
+                        console.log(`Element ${i}:`, item, `(type: ${typeof item}, length: ${item?.length})`);
+                    });
+                }
+                
+                if (Array.isArray(coseData) && (coseData.length === 4 || coseData.length === 3)) {
                     const protectedHeaders = coseData[0];
                     const unprotectedHeaders = coseData[1] || {};
                     const payload = coseData[2];
-                    const signature = coseData[3];
+                    const signature = coseData.length === 4 ? coseData[3] : null; // Only for Sign1/Mac0
                     
                     // Decode protected headers
                     let decodedProtected = {};
                     if (protectedHeaders && protectedHeaders.length > 0) {
-                        const protectedDecoder = new CBORDecoder(protectedHeaders);
-                        decodedProtected = protectedDecoder.decode() || {};
+                        console.log('Protected headers raw bytes:', protectedHeaders);
+                        console.log('Protected headers as array:', Array.from(protectedHeaders));
+                        try {
+                            const protectedDecoder = new CBORDecoder(protectedHeaders);
+                            decodedProtected = protectedDecoder.decode() || {};
+                            console.log('Decoded protected headers:', decodedProtected);
+                            
+                            // Try manual decoding as a test
+                            console.log('Manual CBOR analysis:');
+                            if (protectedHeaders.length >= 2) {
+                                console.log('Byte 0 (a1):', protectedHeaders[0].toString(16), '= map with', protectedHeaders[0] & 0x1f, 'pairs');
+                                console.log('Byte 1 (c2):', protectedHeaders[1].toString(16), '= major type', protectedHeaders[1] >> 5, 'value', protectedHeaders[1] & 0x1f);
+                                // If this is supposed to be {1: 10}, then c2 is wrong. It should be 01 0a
+                                console.log('Expected for {1: 10}: a1 01 0a (map, key 1, value 10)');
+                                console.log('But we have: a1 c2 (map, then tag 2???)');
+                            }
+                        } catch (e) {
+                            console.error('Failed to decode protected headers:', e);
+                        }
                     }
                     
                     const algorithm = decodedProtected[1] || unprotectedHeaders[1];
                     const keyId = decodedProtected[4] || unprotectedHeaders[4];
+                    const iv = decodedProtected[5] || unprotectedHeaders[5]; // IV for encryption
                     
-                    // Parse payload (CWT claims)
+                    // Parse payload - for COSE_Encrypt0, this is encrypted data
                     let claims = null;
-                    if (payload) {
+                    if (payload && coseType !== 'COSE_Encrypt0') {
+                        // Only decode for non-encrypted payloads
                         const payloadDecoder = new CBORDecoder(payload);
                         claims = payloadDecoder.decode();
                     }
@@ -2146,6 +2500,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
                         protectedBytes: protectedHeaders,
                         protectedHeaders: decodedProtected,
                         unprotectedHeaders: unprotectedHeaders,
+                        iv: iv,
                         isCWTTagged: isCWTTagged
                     };
                 }
@@ -2234,6 +2589,13 @@ Load a token to see parsed claims • Click claim names to edit mappings
                         claims: coseResult.claims,
                         cose: coseResult
                     };
+                } else if (coseResult.type === 'COSE_Encrypt0') {
+                    // For encrypted tokens, claims are not available until after decryption
+                    return { 
+                        success: true, 
+                        claims: null, // Will be populated after decryption
+                        cose: coseResult
+                    };
                 } else {
                     return { 
                         success: false, 
@@ -2286,7 +2648,25 @@ Load a token to see parsed claims • Click claim names to edit mappings
         }
 
         function updateDisplay() {
-            const token = domCache.tokenInput.textContent.trim();
+            // Get the raw text content and ensure no character substitution
+            let token = domCache.tokenInput.textContent.trim();
+            
+            // WORKAROUND: Some browsers/OS auto-correct _ to / in contenteditable
+            // Check if this looks like a mangled base64url token
+            if (token.includes('/') && !token.includes('_') && !token.includes('=')) {
+                console.warn('Detected possible auto-corrected base64url token, attempting to fix...');
+                // This is likely a base64url token that had _ converted to /
+                // We'll convert it back for common patterns
+                // Note: This is a heuristic and might not be perfect
+                token = token.replace(/\//g, '_');
+            }
+            
+            // Get the verification/decryption section - find by looking for either title
+            const signatureSection = Array.from(document.querySelectorAll('.section')).find(section => {
+                const headerSpan = section.querySelector('.section-header span');
+                return headerSpan && (headerSpan.textContent.includes('Signature Verification') || headerSpan.textContent.includes('Decryption'));
+            });
+            
             const claimsDisplay = domCache.claimsDisplay;
             
             if (!token) {
@@ -2306,6 +2686,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 currentClaims = null;
                 currentCOSEResult = null;
                 updateCOSEInfo(null);
+                updateSectionHeaders(null); // Reset to default
                 updateSignatureStatus();
                 updateCBORVisualization('');
                 return;
@@ -2314,6 +2695,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
             const result = parseCWT(token);
             currentCOSEResult = result.cose;
             updateCOSEInfo(result.cose);
+            updateSectionHeaders(result.cose?.type);
             updateSignatureStatus();
             
             if (!result.success) {
@@ -2321,6 +2703,20 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 domCache.claimCount.textContent = '0 claims';
                 currentClaims = null;
                 updateCBORVisualization(token); // Still show CBOR structure even if parsing failed
+                return;
+            }
+            
+            // Handle COSE_Encrypt0 tokens with no initial claims
+            if (result.cose && result.cose.type === 'COSE_Encrypt0' && !result.claims) {
+                claimsDisplay.innerHTML = `
+                    <div class="info">
+                        <i data-lucide="lock"></i> 
+                        Encrypted payload - decrypt to view claims
+                    </div>
+                `;
+                domCache.claimCount.textContent = 'encrypted';
+                currentClaims = null;
+                updateCBORVisualization(token);
                 return;
             }
             
@@ -2566,6 +2962,7 @@ Click claim names to edit mappings • <a href="https://tools.ietf.org/rfc/rfc83
         }
 
         function loadSample() {
+            
             // Real COSE_Sign1 wrapped CWT token with cryptographic signature
             // Generated using our cwt-verify.js script with ES256 algorithm
             // Structure: CWT tag (61) wrapping COSE_Sign1 structure
@@ -2594,6 +2991,8 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
             document.getElementById('verificationKeyInput').textContent = samplePublicKey;
             
             updateDisplay();
+            updateSignatureStatus();
+            saveInputs();
         }
 
         function exportSchema() {
@@ -2638,9 +3037,17 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
         document.getElementById('tokenInput').addEventListener('input', function() {
             updateDisplay();
             saveInputs();
+            // Also trigger verification if there's already a key present
+            const keyInput = document.getElementById('verificationKeyInput');
+            if (keyInput && keyInput.textContent.trim()) {
+                updateSignatureStatus();
+            }
         });
         
-        document.getElementById('verificationKeyInput').addEventListener('input', saveInputs);
+        document.getElementById('verificationKeyInput').addEventListener('input', function() {
+            saveInputs();
+            updateSignatureStatus();
+        });
         
         document.getElementById('includeStandard').addEventListener('change', function() {
             updateClaimsList();
@@ -2728,10 +3135,46 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
             saveCustomClaims();
         };
 
+        // Update section headers based on COSE type
+        function updateSectionHeaders(coseType) {
+            const signatureSection = Array.from(document.querySelectorAll('.section')).find(section => {
+                const headerSpan = section.querySelector('.section-header span');
+                return headerSpan && (headerSpan.textContent.includes('Signature Verification') || headerSpan.textContent.includes('Decryption'));
+            });
+            
+            if (signatureSection) {
+                const headerSpan = signatureSection.querySelector('.section-header span');
+                const keyLabel = signatureSection.querySelector('.form-label');
+                
+                if (coseType === 'COSE_Encrypt0') {
+                    // Update for decryption
+                    headerSpan.innerHTML = '<i data-lucide="unlock"></i> Decryption';
+                    if (keyLabel) {
+                        keyLabel.textContent = 'Decryption Key';
+                    }
+                } else {
+                    // Update for signature verification (default for COSE_Sign1, COSE_Mac0, etc.)
+                    headerSpan.innerHTML = '<i data-lucide="check-circle"></i> Signature Verification';
+                    if (keyLabel) {
+                        keyLabel.textContent = 'Verification Key';
+                    }
+                }
+                
+                // Refresh icons
+                lucide.createIcons();
+            }
+        }
+
         async function updateSignatureStatus() {
             const statusElement = document.getElementById('signatureStatus');
             const keyInput = document.getElementById('verificationKeyInput');
             const keyValue = keyInput ? keyInput.textContent.trim() : '';
+            
+            // Show algorithm indicators for all COSE types now that we support encryption algorithms
+            const algorithmIndicators = document.querySelector('.input-format-toggle');
+            if (algorithmIndicators) {
+                algorithmIndicators.style.display = 'block';
+            }
             
             if (!currentCOSEResult) {
                 statusElement.innerHTML = `
@@ -2774,30 +3217,107 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
             
             try {
                 // Parse and import the key
-                const publicKey = await coseVerifier.parseKey(keyMaterial);
+                const key = await coseVerifier.parseKey(keyMaterial);
                 
-                // Verify the signature
-                const isValid = await coseVerifier.verifySignature(currentCOSEResult, publicKey);
-                
-                if (isValid) {
-                    // Update key type indicator with algorithm information
-                    const algorithm = currentCOSEResult.algorithm;
-                    if (algorithm === -7 || algorithm === -35 || algorithm === -36) {
-                        setKeyType('ECDSA', algorithm);
-                    } else if ([4, 5, 6, 7].includes(algorithm)) {
-                        setKeyType('HMAC', algorithm);
+                // Handle different COSE types
+                if (currentCOSEResult.type === 'COSE_Encrypt0') {
+                    console.log('Attempting COSE_Encrypt0 decryption...');
+                    console.log('Full COSE result:', currentCOSEResult);
+                    console.log('Algorithm:', currentCOSEResult.algorithm);
+                    console.log('Protected headers:', currentCOSEResult.protectedHeaders);
+                    console.log('Unprotected headers:', currentCOSEResult.unprotectedHeaders);
+                    console.log('IV:', currentCOSEResult.iv);
+                    
+                    // Algorithm indicators will show the encryption algorithm (AES-GCM-128, etc.)
+                    
+                    // Show warning for AES-CCM only (AES-GCM is supported)
+                    if (currentCOSEResult.algorithm === 10) {
+                        statusElement.innerHTML = `
+                            <div class="error">
+                                <i data-lucide="alert-triangle"></i> 
+                                AES-CCM is not supported by Web Crypto API
+                            </div>
+                        `;
+                        lucide.createIcons();
+                        return; // Don't attempt decryption
                     }
                     
-                    statusElement.innerHTML = `
-                        <div class="success"><i data-lucide="check"></i> Signature verification PASSED</div>
-                    `;
-                } else {
-                    statusElement.innerHTML = `
-                        <div class="error"><i data-lucide="x"></i> Signature verification FAILED</div>
+                    // Attempt decryption
+                    const decryptedPayload = await coseVerifier.decryptPayload(currentCOSEResult, key);
+                    console.log('Decrypted payload:', decryptedPayload);
+                    
+                    // Try to parse the decrypted payload as CWT claims
+                    let decryptedClaims;
+                    try {
+                        const decoder = new CBORDecoder(decryptedPayload);
+                        decryptedClaims = decoder.decode();
+                        console.log('Decrypted claims:', decryptedClaims);
+                        
+                        // Validate that we got a proper claims object (should be a map/object)
+                        if (!decryptedClaims || typeof decryptedClaims !== 'object') {
+                            throw new Error('Decrypted payload is not a valid CBOR map');
+                        }
+                        
+                        // Update the claims display with decrypted content
+                        currentCOSEResult.claims = decryptedClaims;
+                        
+                        // Update the main claims display
+                        currentClaims = decryptedClaims;
+                        
+                        // Format and display the decrypted claims
+                        const claimsDisplay = domCache.claimsDisplay;
+                        const formattedClaims = formatClaimsForDisplay(decryptedClaims);
+                        claimsDisplay.innerHTML = formattedClaims + `
                         <div class="help-text">
-                            ❌ The signature is cryptographically invalid - do not trust claims
-                        </div>
-                    `;
+                        Click claim names to edit mappings • <a href="https://tools.ietf.org/rfc/rfc8392.txt#section-3.1" target="_blank" class="rfc-link">RFC 8392 §3.1</a>
+                        </div>`;
+                        
+                        // Update key type indicator
+                        const algorithm = currentCOSEResult.algorithm;
+                        if (algorithm === 1 || algorithm === 10) {
+                            setKeyType('AES', algorithm);
+                        }
+                        
+                        statusElement.innerHTML = `
+                            <div class="success"><i data-lucide="unlock"></i> Decryption PASSED</div>
+                            <div class="help-text">
+                                ✅ Payload successfully decrypted and claims decoded
+                            </div>
+                        `;
+                    } catch (parseError) {
+                        console.error('Failed to parse decrypted payload:', parseError);
+                        statusElement.innerHTML = `
+                            <div class="error"><i data-lucide="x"></i> Decryption failed</div>
+                            <div class="help-text">
+                                ❌ Decryption produced invalid data - wrong key or algorithm?<br>
+                                ${parseError.message}
+                            </div>
+                        `;
+                    }
+                } else {
+                    // Standard signature verification for COSE_Sign1 and COSE_Mac0
+                    const isValid = await coseVerifier.verifySignature(currentCOSEResult, key);
+                    
+                    if (isValid) {
+                        // Update key type indicator with algorithm information
+                        const algorithm = currentCOSEResult.algorithm;
+                        if (algorithm === -7 || algorithm === -35 || algorithm === -36) {
+                            setKeyType('ECDSA', algorithm);
+                        } else if ([4, 5, 6, 7].includes(algorithm)) {
+                            setKeyType('HMAC', algorithm);
+                        }
+                        
+                        statusElement.innerHTML = `
+                            <div class="success"><i data-lucide="check"></i> Signature verification PASSED</div>
+                        `;
+                    } else {
+                        statusElement.innerHTML = `
+                            <div class="error"><i data-lucide="x"></i> Signature verification FAILED</div>
+                            <div class="help-text">
+                                ❌ The signature is cryptographically invalid - do not trust claims
+                            </div>
+                        `;
+                    }
                 }
                 
                 lucide.createIcons();
@@ -2816,10 +3336,7 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
             }
         }
 
-        // Add event listener for verification key input  
-        document.getElementById('verificationKeyInput').addEventListener('input', function() {
-            updateSignatureStatus();
-        });
+        // Note: Verification key input listener is handled above in main event listeners section
 
         // Help toggle function
         function toggleHelp() {
@@ -2886,6 +3403,13 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
         updateClaimsList();
         restoreInputs(); // Restore saved inputs
         updateDisplay();
+        
+        // Trigger verification if both token and key are present after restore
+        const tokenInput = document.getElementById('tokenInput');
+        const keyInput = document.getElementById('verificationKeyInput');
+        if (tokenInput?.textContent.trim() && keyInput?.textContent.trim()) {
+            updateSignatureStatus();
+        }
         
         // Initialize Lucide icons
         lucide.createIcons();
