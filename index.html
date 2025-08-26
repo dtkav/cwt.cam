@@ -2616,8 +2616,31 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
             );
         }
 
+        // Save/restore text box contents
+        function saveInputs() {
+            localStorage.setItem('cwt-token', domCache.tokenInput.textContent);
+            localStorage.setItem('cwt-key', domCache.verificationKeyInput.textContent);
+        }
+        
+        function restoreInputs() {
+            const savedToken = localStorage.getItem('cwt-token');
+            const savedKey = localStorage.getItem('cwt-key');
+            
+            if (savedToken) {
+                domCache.tokenInput.textContent = savedToken;
+            }
+            if (savedKey) {
+                domCache.verificationKeyInput.textContent = savedKey;
+            }
+        }
+
         // Event listeners
-        document.getElementById('tokenInput').addEventListener('input', updateDisplay);
+        document.getElementById('tokenInput').addEventListener('input', function() {
+            updateDisplay();
+            saveInputs();
+        });
+        
+        document.getElementById('verificationKeyInput').addEventListener('input', saveInputs);
         
         document.getElementById('includeStandard').addEventListener('change', function() {
             updateClaimsList();
@@ -2861,6 +2884,7 @@ IggmS3ZNv+UJVkRhgA09metes+A1cWPx12JQdIdjF3wIubLWjddlpLDaUw==
         // Initialize DOM cache and app
         domCache.init();
         updateClaimsList();
+        restoreInputs(); // Restore saved inputs
         updateDisplay();
         
         // Initialize Lucide icons
