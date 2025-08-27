@@ -869,13 +869,31 @@ class CBORVisualizer {
             item.innerHTML = content;
             
             item.addEventListener('mouseenter', () => {
-                this.highlightRelatedHover(index, 'structure', onHighlight);
+                // Special handling for decrypted content structure
+                if (structure.isDecrypted) {
+                    this.highlightDecryptedPayloadBytes(structure);
+                } else if (this.structureContainsDecryptedContent(index)) {
+                    // If this structure contains decrypted content, highlight both
+                    this.highlightRelatedHover(index, 'structure', onHighlight);
+                    this.highlightAllDecryptedBytes();
+                } else {
+                    this.highlightRelatedHover(index, 'structure', onHighlight);
+                }
             });
             item.addEventListener('mouseleave', () => {
                 this.clearHighlight(onClearHighlight);
             });
             item.addEventListener('click', () => {
-                this.highlightRelated(index, 'structure', onHighlight);
+                // Special handling for decrypted content structure
+                if (structure.isDecrypted) {
+                    this.highlightDecryptedPayloadBytes(structure, true);
+                } else if (this.structureContainsDecryptedContent(index)) {
+                    // If this structure contains decrypted content, highlight both
+                    this.highlightRelated(index, 'structure', onHighlight);
+                    this.highlightAllDecryptedBytes(true);
+                } else {
+                    this.highlightRelated(index, 'structure', onHighlight);
+                }
             });
             
             container.appendChild(item);
@@ -914,8 +932,8 @@ class CBORVisualizer {
                 if (structure && structure.isEmbeddedInDecrypted) {
                     // Highlight decrypted bytes instead of main CBOR bytes
                     this.highlightDecryptedBytes(structure, value);
-                } else {
-                    // Highlight regular CBOR bytes
+                } else if (structure && structure.isEncrypted) {
+                    // This is an encrypted payload - highlight ONLY the encrypted bytes
                     const startOffset = parseInt(structureElement.dataset.startOffset);
                     const endOffset = parseInt(structureElement.dataset.endOffset);
                     
@@ -927,6 +945,9 @@ class CBORVisualizer {
                             }
                         }
                     }
+                } else {
+                    // Highlight all bytes that belong to this structure and its children
+                    this.highlightStructureSubtree(value);
                 }
             }
         }
@@ -958,6 +979,160 @@ class CBORVisualizer {
                 decryptedByte.classList.add('cbor-highlighted');
             }
         });
+    }
+
+    /**
+     * Highlight all decrypted payload bytes when hovering over the decrypted content structure
+     */
+    highlightDecryptedPayloadBytes(structure, withScroll = false) {
+        this.clearHighlight();
+        
+        // Highlight the structure itself
+        const structureIndex = this.currentStructures.indexOf(structure);
+        const structureElement = document.querySelector(`.cbor-structure-item[data-structure-index="${structureIndex}"]`);
+        if (structureElement) {
+            structureElement.classList.add('cbor-highlighted');
+        }
+        
+        // Find all decrypted bytes in the byte viewer
+        const decryptedByteElements = document.querySelectorAll('[data-decrypted-index]');
+        let firstByteElement = null;
+        
+        decryptedByteElements.forEach((byteElement, index) => {
+            byteElement.classList.add('cbor-highlighted');
+            if (index === 0) {
+                firstByteElement = byteElement;
+            }
+        });
+        
+        // Scroll to first decrypted byte if this is a click event
+        if (withScroll && firstByteElement) {
+            this.scrollIntoViewIfNeeded(firstByteElement);
+        }
+    }
+
+    /**
+     * Check if a structure contains any decrypted content within its range
+     */
+    structureContainsDecryptedContent(structureIndex) {
+        const structure = this.currentStructures[structureIndex];
+        if (!structure) return false;
+        
+        // Check if any child structures within this structure's range are decrypted
+        for (let i = structureIndex + 1; i < this.currentStructures.length; i++) {
+            const childStruct = this.currentStructures[i];
+            
+            // Stop if we've moved past this structure's range
+            if (childStruct.indent <= structure.indent) break;
+            
+            // Check if this is a decrypted structure
+            if (childStruct.isDecrypted) return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * Highlight all decrypted bytes without clearing other highlights
+     */
+    highlightAllDecryptedBytes(withScroll = false) {
+        // Find all decrypted bytes in the byte viewer
+        const decryptedByteElements = document.querySelectorAll('[data-decrypted-index]');
+        let firstByteElement = null;
+        
+        decryptedByteElements.forEach((byteElement, index) => {
+            byteElement.classList.add('cbor-highlighted');
+            if (index === 0) {
+                firstByteElement = byteElement;
+            }
+        });
+        
+        // Scroll to first decrypted byte if this is a click event
+        if (withScroll && firstByteElement) {
+            this.scrollIntoViewIfNeeded(firstByteElement);
+        }
+    }
+
+    /**
+     * Check if a structure has any encrypted child structures
+     */
+    structureHasEncryptedChild(structureIndex) {
+        const structure = this.currentStructures[structureIndex];
+        if (!structure) return false;
+        
+        // Check all child structures within this structure's range
+        for (let i = structureIndex + 1; i < this.currentStructures.length; i++) {
+            const childStruct = this.currentStructures[i];
+            
+            // Stop if we've moved past this structure's range
+            if (childStruct.indent <= structure.indent) break;
+            
+            // Check if this child is encrypted or has a decrypted counterpart
+            if (childStruct.isEncrypted || childStruct.decryptedStructureIndex !== undefined) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Highlight all bytes that belong to a structure and its subtree
+     */
+    highlightStructureSubtree(structureIndex, withScroll = false) {
+        const structure = this.currentStructures[structureIndex];
+        if (!structure) return;
+        
+        let minOffset = Infinity;
+        let maxOffset = -1;
+        let firstByteElement = null;
+        let hasDecryptedContent = false;
+        
+        // Collect all byte offsets from this structure and its children
+        for (let i = structureIndex; i < this.currentStructures.length; i++) {
+            const childStruct = this.currentStructures[i];
+            
+            // Stop if we've moved past this structure's range (for children)
+            if (i > structureIndex && childStruct.indent <= structure.indent) break;
+            
+            // Check if this child has decrypted content
+            if (childStruct.isDecrypted || childStruct.isEncrypted || childStruct.decryptedStructureIndex !== undefined) {
+                hasDecryptedContent = true;
+            }
+            
+            // Skip embedded structures (they don't map to main CBOR bytes)
+            if (childStruct.isEmbeddedInDecrypted) continue;
+            
+            // Get byte range for this structure
+            if (childStruct.startOffset !== undefined && childStruct.endOffset !== undefined) {
+                minOffset = Math.min(minOffset, childStruct.startOffset);
+                maxOffset = Math.max(maxOffset, childStruct.endOffset);
+            }
+        }
+        
+        // Highlight regular CBOR bytes in the range
+        if (minOffset !== Infinity && maxOffset !== -1) {
+            for (let i = minOffset; i <= maxOffset; i++) {
+                const byteElement = document.querySelector(`.cbor-byte[data-offset="${i}"]`);
+                if (byteElement) {
+                    byteElement.classList.add('cbor-highlighted');
+                    if (!firstByteElement) {
+                        firstByteElement = byteElement;
+                    }
+                }
+            }
+        }
+        
+        // Also highlight decrypted bytes if this subtree contains encrypted content
+        // Exception: "[Encrypted Payload]" should NOT highlight decrypted bytes
+        if (hasDecryptedContent && !structure.description?.includes('[Encrypted Payload')) {
+            this.highlightAllDecryptedBytes();
+        }
+        
+        // Scroll to first byte if requested
+        if (withScroll && firstByteElement) {
+            this.scrollIntoViewIfNeeded(firstByteElement);
+        }
     }
 
     /**
@@ -994,8 +1169,8 @@ class CBORVisualizer {
                 if (structure && structure.isEmbeddedInDecrypted) {
                     // Highlight decrypted bytes instead of main CBOR bytes
                     this.highlightDecryptedBytes(structure, value);
-                } else {
-                    // Highlight regular CBOR bytes and scroll first byte into view
+                } else if (structure && structure.isEncrypted) {
+                    // This is an encrypted payload - highlight ONLY the encrypted bytes and scroll first byte into view
                     const startOffset = parseInt(structureElement.dataset.startOffset);
                     const endOffset = parseInt(structureElement.dataset.endOffset);
                     
@@ -1015,6 +1190,9 @@ class CBORVisualizer {
                             this.scrollIntoViewIfNeeded(firstByteElement);
                         }
                     }
+                } else {
+                    // Highlight all bytes that belong to this structure and its children
+                    this.highlightStructureSubtree(value, true);
                 }
             }
         }
@@ -1429,7 +1607,8 @@ class CBORVisualizationDecoder {
                                 endOffset: byteStringStart + value - 1,
                                 description: `[Encrypted Payload - ${value} bytes]`,
                                 raw: Array.from(byteString),
-                                isEncrypted: true
+                                isEncrypted: true,
+                                decryptedStructureIndex: encryptedStructureIndex + 1  // Link to decrypted version
                             });
                             
                             // Show decrypted content header
@@ -1440,7 +1619,7 @@ class CBORVisualizationDecoder {
                                 description: `[Decrypted Content - ${decryptedPayload.length} bytes]`,
                                 raw: Array.from(decryptedPayload),
                                 isDecrypted: true,
-                                encryptedStructureIndex: encryptedStructureIndex
+                                encryptedStructureIndex: encryptedStructureIndex  // Link back to encrypted version
                             });
                             
                             // Decode the decrypted CBOR - these structures will be linked to decrypted bytes
