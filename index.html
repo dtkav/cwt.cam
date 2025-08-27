@@ -2007,7 +2007,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
                         } else {
                             // Default to HMAC - will be corrected during verification if needed
                             setKeyType('HMAC');
-                            return await crypto.subtle.importKey('jwk', cleanJwk, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+                            return await crypto.subtle.importKey('jwk', cleanJwk, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
                         }
                     } else {
                         throw new Error(`Unsupported JWK key type: ${jwk.kty}`);
@@ -2065,7 +2065,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
                     keyBytes,
                     { name: 'HMAC', hash: hashAlgorithm },
                     false,
-                    ['verify']
+                    ['sign']
                 );
             }
 
