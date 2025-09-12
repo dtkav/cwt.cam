@@ -1223,7 +1223,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
                         <label for="includeStandard">RFC 8392 Claims (1-7)</label>
                     </div>
                     <div class="checkbox-container">
-                        <input type="checkbox" id="includeIana" checked>
+                        <input type="checkbox" id="includeIana">
                         <label for="includeIana">IANA Extended Claims</label>
                     </div>
                     <div class="controls">
@@ -3152,12 +3152,16 @@ fspp7YkZo5TULw9g9/GngNing7+3ot1rJ5boEo27zvnT0WjblSmXGjbnuQ==
         function restoreInputs() {
             const savedToken = localStorage.getItem('cwt-token');
             const savedKey = localStorage.getItem('cwt-key');
+            const savedIanaEnabled = localStorage.getItem('cwt-include-iana');
             
             if (savedToken) {
                 domCache.tokenInput.textContent = savedToken;
             }
             if (savedKey) {
                 domCache.verificationKeyInput.textContent = savedKey;
+            }
+            if (savedIanaEnabled !== null) {
+                document.getElementById('includeIana').checked = savedIanaEnabled === 'true';
             }
         }
 
@@ -3183,6 +3187,7 @@ fspp7YkZo5TULw9g9/GngNing7+3ot1rJ5boEo27zvnT0WjblSmXGjbnuQ==
         });
         
         document.getElementById('includeIana').addEventListener('change', function() {
+            localStorage.setItem('cwt-include-iana', this.checked);
             updateClaimsList();
             updateDisplay();
         });
