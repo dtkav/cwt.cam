@@ -103,6 +103,7 @@
         .main {
             display: grid;
             grid-template-columns: 1fr 350px;
+            align-items: start;
             flex: 1;
         }
 
@@ -118,6 +119,9 @@
             background: #0f0f0f;
             display: flex;
             flex-direction: column;
+            height: 0;
+            min-height: 100%;
+            overflow-y: auto;
         }
         
         .schema-panel-header {
