@@ -1109,6 +1109,7 @@
                         </div>
                         <div class="cose-field">
                             <div class="input-format-toggle" style="margin-top: 0.25rem;">
+                                <span class="format-indicator" id="coseEddsaBtn">EdDSA</span>
                                 <span class="format-indicator" id="coseEcdsa256Btn">ES256</span>
                                 <span class="format-indicator" id="coseEcdsa384Btn">ES384</span>
                                 <span class="format-indicator" id="coseEcdsa512Btn">ES512</span>
@@ -1142,6 +1143,7 @@
                             <span class="format-indicator" id="keyBase64Btn">Base64</span>
                         </div>
                         <div class="input-format-toggle">
+                            <span class="format-indicator" id="keyEddsaBtn">EdDSA</span>
                             <span class="format-indicator" id="keyEcdsa256Btn">ES256</span>
                             <span class="format-indicator" id="keyEcdsa384Btn">ES384</span>
                             <span class="format-indicator" id="keyEcdsa512Btn">ES512</span>
@@ -1617,6 +1619,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
 
         function setKeyType(type, algorithm = null) {
             // Clear all key type indicators
+            document.getElementById('keyEddsaBtn').classList.remove('active');
             document.getElementById('keyEcdsa256Btn').classList.remove('active');
             document.getElementById('keyEcdsa384Btn').classList.remove('active');
             document.getElementById('keyEcdsa512Btn').classList.remove('active');
@@ -1625,7 +1628,9 @@ Load a token to see parsed claims • Click claim names to edit mappings
             document.getElementById('keyHmac512Btn').classList.remove('active');
             
             // Set active based on type and algorithm if available
-            if (type === 'ECDSA') {
+            if (type === 'EdDSA') {
+                document.getElementById('keyEddsaBtn').classList.add('active');
+            } else if (type === 'ECDSA') {
                 if (algorithm === -7) {
                     document.getElementById('keyEcdsa256Btn').classList.add('active');
                 } else if (algorithm === -35) {
@@ -1666,9 +1671,9 @@ Load a token to see parsed claims • Click claim names to edit mappings
         }
 
         function setCoseAlgorithm(algorithm) {
-            const buttonIds = ['coseEcdsa256Btn', 'coseEcdsa384Btn', 'coseEcdsa512Btn', 'coseHmac256Btn', 'coseHmac384Btn', 'coseHmac512Btn', 'coseAesGcm128Btn', 'coseAesCcm128Btn'];
+            const buttonIds = ['coseEddsaBtn', 'coseEcdsa256Btn', 'coseEcdsa384Btn', 'coseEcdsa512Btn', 'coseHmac256Btn', 'coseHmac384Btn', 'coseHmac512Btn', 'coseAesGcm128Btn', 'coseAesCcm128Btn'];
             const algoMap = {
-                [-7]: 'coseEcdsa256Btn', [-35]: 'coseEcdsa384Btn', [-36]: 'coseEcdsa512Btn',
+                [-8]: 'coseEddsaBtn', [-7]: 'coseEcdsa256Btn', [-35]: 'coseEcdsa384Btn', [-36]: 'coseEcdsa512Btn',
                 [4]: 'coseHmac256Btn', [5]: 'coseHmac256Btn', [6]: 'coseHmac384Btn', [7]: 'coseHmac512Btn',
                 [1]: 'coseAesGcm128Btn', [10]: 'coseAesCcm128Btn'
             };
@@ -1689,6 +1694,7 @@ Load a token to see parsed claims • Click claim names to edit mappings
 
             const algorithmButtons = `
                 <div class="input-format-toggle" style="margin-top: 0.25rem;">
+                    <span class="format-indicator ${coseResult.algorithm === -8 ? 'active' : ''}" id="tempEddsa">EdDSA</span>
                     <span class="format-indicator ${coseResult.algorithm === -7 ? 'active' : ''}" id="tempEcdsa256">ES256</span>
                     <span class="format-indicator ${coseResult.algorithm === -35 ? 'active' : ''}" id="tempEcdsa384">ES384</span>
                     <span class="format-indicator ${coseResult.algorithm === -36 ? 'active' : ''}" id="tempEcdsa512">ES512</span>
@@ -1930,7 +1936,8 @@ Load a token to see parsed claims • Click claim names to edit mappings
         class COSEVerifier {
             constructor() {
                 this.supportedAlgorithms = {
-                    '-7': 'ES256',  // ECDSA with SHA-256
+                    '-8': 'EdDSA',       // EdDSA with Ed25519
+                    '-7': 'ES256',       // ECDSA with SHA-256
                     '1': 'AES-GCM-128',      // AES-GCM with 128-bit key, 128-bit tag
                     '4': 'HMAC256/64',   // HMAC 256/64
                     '5': 'HMAC256/256',  // HMAC 256/256
@@ -1952,8 +1959,16 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 if (keyMaterial.startsWith('-----BEGIN PUBLIC KEY-----')) {
                     setKeyFormat('pem');
                     const key = await this.importPEMKey(keyMaterial);
-                    setKeyType('ECDSA');
-                    return key;
+                    // Auto-detect if it's Ed25519 or ECDSA based on key size or try both
+                    try {
+                        // Try Ed25519 first
+                        setKeyType('EdDSA');
+                        return key;
+                    } catch (error) {
+                        // Fall back to ECDSA
+                        setKeyType('ECDSA');
+                        return key;
+                    }
                 } else if (keyMaterial.startsWith('{')) {
                     setKeyFormat('jwk');
                     const key = await this.parseJWK(keyMaterial);
@@ -1984,10 +1999,15 @@ Load a token to see parsed claims • Click claim names to edit mappings
                             return key;
                         }
                     } else {
-                        // Normal order: ECDSA, HMAC, then AES
+                        // Normal order: Ed25519/ECDSA, HMAC, then AES
                         try {
                             const key = await this.importRawKey(keyBytes);
-                            setKeyType('ECDSA');
+                            // importRawKey will determine if it's Ed25519 or ECDSA based on key length
+                            if (keyBytes.length === 32) {
+                                setKeyType('EdDSA');
+                            } else {
+                                setKeyType('ECDSA');
+                            }
                             return key;
                         } catch (error) {
                             try {
@@ -2006,10 +2026,14 @@ Load a token to see parsed claims • Click claim names to edit mappings
                     try {
                         setKeyFormat('base64');
                         const keyBytes = this.base64ToBytes(keyMaterial);
-                        // Try ECDSA, HMAC, and AES in order
+                        // Try Ed25519/ECDSA, HMAC, and AES in order
                         try {
                             const key = await this.importRawKey(keyBytes);
-                            setKeyType('ECDSA');
+                            if (keyBytes.length === 32) {
+                                setKeyType('EdDSA');
+                            } else {
+                                setKeyType('ECDSA');
+                            }
                             return key;
                         } catch (error) {
                             try {
@@ -2032,7 +2056,17 @@ Load a token to see parsed claims • Click claim names to edit mappings
                 try {
                     const jwk = JSON.parse(keyMaterial);
                     
-                    if (jwk.kty === 'EC') {
+                    if (jwk.kty === 'OKP' && jwk.crv === 'Ed25519') {
+                        // Ed25519 key
+                        setKeyType('EdDSA');
+                        const cleanJwk = {
+                            kty: jwk.kty,
+                            crv: jwk.crv,
+                            x: jwk.x
+                        };
+                        
+                        return await crypto.subtle.importKey('jwk', cleanJwk, 'Ed25519', false, ['verify']);
+                    } else if (jwk.kty === 'EC') {
                         // ECDSA key
                         setKeyType('ECDSA');
                         const cleanJwk = {
@@ -2077,17 +2111,45 @@ Load a token to see parsed claims • Click claim names to edit mappings
                               .replace(/\s/g, '');
                 const keyData = this.base64ToBytes(b64);
                 
-                return crypto.subtle.importKey(
-                    'spki',
-                    keyData,
-                    { name: 'ECDSA', namedCurve: 'P-256' },
-                    false,
-                    ['verify']
-                );
+                // Try Ed25519 first, then fall back to ECDSA
+                try {
+                    return await crypto.subtle.importKey(
+                        'spki',
+                        keyData,
+                        'Ed25519',
+                        false,
+                        ['verify']
+                    );
+                } catch (error) {
+                    // Fall back to ECDSA P-256
+                    return await crypto.subtle.importKey(
+                        'spki',
+                        keyData,
+                        { name: 'ECDSA', namedCurve: 'P-256' },
+                        false,
+                        ['verify']
+                    );
+                }
             }
 
             async importRawKey(keyBytes) {
-                // Assume uncompressed point format (0x04 + 32 bytes x + 32 bytes y)
+                // Ed25519 public key (32 bytes)
+                if (keyBytes.length === 32) {
+                    try {
+                        const jwk = {
+                            kty: 'OKP',
+                            crv: 'Ed25519',
+                            x: this.bytesToBase64Url(keyBytes)
+                        };
+                        
+                        return await crypto.subtle.importKey('jwk', jwk, 'Ed25519', false, ['verify']);
+                    } catch (error) {
+                        // If Ed25519 fails, this might be something else
+                        throw new Error('32-byte key import failed - not a valid Ed25519 key');
+                    }
+                }
+                
+                // ECDSA uncompressed point format (0x04 + 32 bytes x + 32 bytes y)
                 if (keyBytes.length === 65 && keyBytes[0] === 0x04) {
                     const x = keyBytes.slice(1, 33);
                     const y = keyBytes.slice(33, 65);
@@ -2364,6 +2426,16 @@ For AES-CCM support, use:
                 try {
                     const sigStructure = this.createSigStructure(coseStructure);
                     const algorithm = coseStructure.algorithm;
+                    
+                    if (algorithm === -8) { // EdDSA (Ed25519)
+                        const result = await crypto.subtle.verify(
+                            'Ed25519',
+                            publicKey,
+                            coseStructure.signature,
+                            sigStructure
+                        );
+                        return result;
+                    }
                     
                     if (algorithm === -7) { // ES256
                         // WebCrypto expects raw R|S format for ECDSA signatures
@@ -3440,7 +3512,9 @@ fspp7YkZo5TULw9g9/GngNing7+3ot1rJ5boEo27zvnT0WjblSmXGjbnuQ==
                     if (isValid) {
                         // Update key type indicator with algorithm information
                         const algorithm = currentCOSEResult.algorithm;
-                        if (algorithm === -7 || algorithm === -35 || algorithm === -36) {
+                        if (algorithm === -8) {
+                            setKeyType('EdDSA', algorithm);
+                        } else if (algorithm === -7 || algorithm === -35 || algorithm === -36) {
                             setKeyType('ECDSA', algorithm);
                         } else if ([4, 5, 6, 7].includes(algorithm)) {
                             setKeyType('HMAC', algorithm);

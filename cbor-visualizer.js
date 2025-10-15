@@ -1821,7 +1821,7 @@ class CBORVisualizationDecoder {
                     // Determine value context based on key
                     let valueContext = null;
                     if (context === 'cose-header') {
-                        if (keyValue === 1 || keyValue === -7 || keyValue === -35 || keyValue === -36) {
+                        if (keyValue === 1 || keyValue === -7 || keyValue === -8 || keyValue === -35 || keyValue === -36) {
                             valueContext = 'cose-header-value'; // Algorithm parameter
                         } else if (keyValue === -1) {
                             valueContext = 'cose-key-type'; // Key Type parameter
@@ -1967,10 +1967,10 @@ class CBORVisualizationDecoder {
     
     getCOSEAlgorithmName(algId) {
         const algorithms = {
+            '-8': 'EdDSA (Ed25519)',
             '-7': 'ES256 (ECDSA w/ SHA-256)',
             '-35': 'ES384 (ECDSA w/ SHA-384)', 
             '-36': 'ES512 (ECDSA w/ SHA-512)',
-            '-8': 'EdDSA',
             '-257': 'RS256 (RSASSA-PKCS1-v1_5 w/ SHA-256)',
             '-258': 'RS384 (RSASSA-PKCS1-v1_5 w/ SHA-384)',
             '-259': 'RS512 (RSASSA-PKCS1-v1_5 w/ SHA-512)',
